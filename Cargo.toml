@@ -1,0 +1,6 @@
+[package]
+name = "aulac"
+version = "0.1.0"
+authors = ["iola"]
+
+[dependencies]
