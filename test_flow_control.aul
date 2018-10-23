@@ -1,0 +1,25 @@
+var a;
+print "This test should print 1 right.";
+
+// test if
+a = 1;
+if (a == 1) {
+    print "right";
+}
+if (a < 1)
+    print "wrong";
+
+// test while
+a = 0;
+while (a < 3)
+    a = a + 1;
+if (a != 3)
+    print "wrong";
+
+// test for
+a = 1;
+for (var i = 0; i < 3; i = i + 1) {
+    a = a + i;
+}
+if (a != 4)
+    print "wrong";

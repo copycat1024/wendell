@@ -17,11 +17,15 @@ impl<'a> Worker<'a> {
         Self { stack: stack }
     }
 
-    pub fn execute(&mut self, stmts: Vec<Stmt>) -> Result<(), Error> {
+    pub fn run(&mut self, stmts: &[Stmt]) -> Result<(), Error> {
         for stmt in stmts.into_iter() {
-            stmt.accept(self)?;
+            self.execute(stmt)?;
         }
         Ok(())
+    }
+
+    fn execute(&mut self, stmt: &Stmt) -> Result<(), Error> {
+        stmt.accept(self)
     }
 
     fn evaluate(&mut self, expr: &Expr) -> Result<Instance, Error> {
@@ -151,6 +155,46 @@ impl<'a> Worker<'a> {
         }
     }
 
+    fn primitive_or(
+        &mut self,
+        operator: &Token,
+        expr1: &Expr,
+        expr2: &Expr,
+    ) -> Result<Instance, Error> {
+        let value1 = match self.evaluate(expr1)? {
+            Instance::Bool(value1) => value1,
+            value1 => return self.unary_error(operator, "Bool", &value1),
+        };
+        if value1 {
+            Ok(Instance::Bool(value1))
+        } else {
+            match self.evaluate(expr2)? {
+                Instance::Bool(value2) => Ok(Instance::Bool(value2)),
+                value2 => self.unary_error(operator, "Bool", &value2),
+            }
+        }
+    }
+
+    fn primitive_and(
+        &mut self,
+        operator: &Token,
+        expr1: &Expr,
+        expr2: &Expr,
+    ) -> Result<Instance, Error> {
+        let value1 = match self.evaluate(expr1)? {
+            Instance::Bool(value1) => value1,
+            value1 => return self.unary_error(operator, "Bool", &value1),
+        };
+        if !value1 {
+            Ok(Instance::Bool(value1))
+        } else {
+            match self.evaluate(expr2)? {
+                Instance::Bool(value2) => Ok(Instance::Bool(value2)),
+                value2 => self.unary_error(operator, "Bool", &value2),
+            }
+        }
+    }
+
     fn raw_not(&self, value: Result<Instance, Error>) -> Result<Instance, Error> {
         match value? {
             Instance::Bool(v) => Ok(Instance::Bool(!v)),
@@ -199,6 +243,21 @@ impl<'a> Worker<'a> {
         )
     }
 
+    fn condition_error(
+        &self,
+        statement_kind: &str,
+        line: &u32,
+        value: &Instance,
+    ) -> Result<(), Error> {
+        self.error(
+            format!(
+                "{} statement condition must be 'Bool', found '{:?}' instead.",
+                statement_kind, value
+            ),
+            *line,
+        )
+    }
+
     fn binary_error(
         &self,
         operator: &Token,
@@ -240,6 +299,12 @@ impl<'a> ExprVisitor<Result<Instance, Error>> for Worker<'a> {
         operator: &Token,
         right: &Box<Expr>,
     ) -> Result<Instance, Error> {
+        match operator.kind {
+            TokenKind::Or => return self.primitive_or(operator, left, right),
+            TokenKind::And => return self.primitive_and(operator, left, right),
+            _ => (),
+        };
+
         let left = self.evaluate(&left)?;
         let right = self.evaluate(&right)?;
 
@@ -305,6 +370,61 @@ impl<'a> ExprVisitor<Result<Instance, Error>> for Worker<'a> {
 }
 
 impl<'a> StmtVisitor<Result<(), Error>> for Worker<'a> {
+    fn visit_var(&mut self, name: &Token, initializer: &Expr) -> Result<(), Error> {
+        let value = self.evaluate(initializer)?;
+        self.stack.define(name, value)
+    }
+
+    fn visit_block(&mut self, statements: &Vec<Stmt>) -> Result<(), Error> {
+        self.stack.push();
+        for stmt in statements {
+            self.execute(stmt)?;
+        }
+        self.stack.pop();
+        Ok(())
+    }
+
+    fn visit_if(
+        &mut self,
+        line_number: &u32,
+        condition: &Expr,
+        then_block: &Box<Stmt>,
+        else_block: &Box<Stmt>,
+    ) -> Result<(), Error> {
+        match self.evaluate(condition)? {
+            Instance::Bool(con) => if con {
+                self.execute(then_block)
+            } else {
+                self.execute(else_block)
+            },
+            other => self.condition_error("If", line_number, &other),
+        }
+    }
+
+    fn visit_while(
+        &mut self,
+        line_number: &u32,
+        condition: &Expr,
+        body: &Box<Stmt>,
+    ) -> Result<(), Error> {
+        loop {
+            match self.evaluate(condition)? {
+                Instance::Bool(con) => if con {
+                    self.execute(&body)?;
+                } else {
+                    break;
+                },
+                other => self.condition_error("While", line_number, &other)?,
+            }
+        }
+        Ok(())
+    }
+
+    fn visit_expression(&mut self, expression: &Expr) -> Result<(), Error> {
+        self.evaluate(expression)?;
+        Ok(())
+    }
+
     fn visit_print(&mut self, expression: &Expr) -> Result<(), Error> {
         let value = self.evaluate(expression)?;
         match value {
@@ -317,32 +437,7 @@ impl<'a> StmtVisitor<Result<(), Error>> for Worker<'a> {
         Ok(())
     }
 
-    fn visit_expression(&mut self, expression: &Expr) -> Result<(), Error> {
-        let value = self.evaluate(expression)?;
-
-        match value {
-            _ => {
-                println!("{:?}", value);
-                Ok(())
-            }
-        }
-    }
-
-    fn visit_var(&mut self, name: &Token, initializer: &Expr) -> Result<(), Error> {
-        let value = self.evaluate(initializer)?;
-        self.stack.define(name, value)
-    }
-
     fn visit_empty_stmt(&mut self) -> Result<(), Error> {
-        self.error("Found empty Expr.".into(), 0)
-    }
-
-    fn visit_block(&mut self, statements: &Vec<Stmt>) -> Result<(), Error> {
-        self.stack.push();
-        for stmt in statements {
-            stmt.accept(self)?;
-        }
-        self.stack.pop();
         Ok(())
     }
 }

@@ -68,13 +68,16 @@ impl Parser {
         let token = self.peek();
         match token.kind {
             TokenKind::LeftBrace => self.stmt_block(),
+            TokenKind::If => self.stmt_if(),
+            TokenKind::While => self.stmt_while(),
+            TokenKind::For => self.stmt_for(),
             TokenKind::Print => self.stmt_print(),
             _ => self.stmt_expression(),
         }
     }
 
     fn expression(&mut self) -> Result<Expr, Error> {
-        self.assignment()
+        self.expr_assignment()
     }
 
     fn decl_var(&mut self) -> Result<Stmt, Error> {
@@ -89,7 +92,7 @@ impl Parser {
                 lexeme: "nil".into(),
             })
         };
-        self.consume(TokenKind::Semicolon, "Expect ';' after print statement.")?;
+        self.consume(TokenKind::Semicolon, "Expect ';' after var statement.")?;
 
         Ok(Stmt::new_var(name, init))
     }
@@ -106,6 +109,80 @@ impl Parser {
         Ok(Stmt::new_block(statements))
     }
 
+    fn stmt_if(&mut self) -> Result<Stmt, Error> {
+        let token = self.advance(); // eat 'if' token
+        self.consume(TokenKind::LeftParen, "Expect '(' after 'if'.")?;
+        let condition = self.expression()?;
+        self.consume(TokenKind::RightParen, "Expect ')' after if condition.")?;
+
+        let then_block = self.statement()?;
+        let else_block = if self.match_token(&[TokenKind::Else]) {
+            self.statement()?
+        } else {
+            Stmt::Empty
+        };
+
+        Ok(Stmt::new_if(
+            token.line,
+            condition,
+            Box::new(then_block),
+            Box::new(else_block),
+        ))
+    }
+
+    fn stmt_while(&mut self) -> Result<Stmt, Error> {
+        let token = self.advance(); // eat 'while' token
+        self.consume(TokenKind::LeftParen, "Expect '(' after 'if'.")?;
+        let condition = self.expression()?;
+        self.consume(TokenKind::RightParen, "Expect ')' after while condition.")?;
+
+        let body = self.statement()?;
+
+        Ok(Stmt::new_while(token.line, condition, Box::new(body)))
+    }
+
+    fn stmt_for(&mut self) -> Result<Stmt, Error> {
+        let token = self.advance(); // eat 'for' token
+
+        self.consume(TokenKind::LeftParen, "Expect '(' after 'if'.")?;
+
+        let initializer = if self.match_token(&[TokenKind::Semicolon]) {
+            Stmt::Empty
+        } else if self.check(TokenKind::Var) {
+            self.decl_var()?
+        } else {
+            self.stmt_expression()?
+        };
+
+        let condition = if self.check(TokenKind::Semicolon) {
+            Expr::new_literal(Token {
+                kind: TokenKind::True,
+                lexeme: "true".to_string(),
+                line: token.line,
+            })
+        } else {
+            self.expression()?
+        };
+        self.consume(TokenKind::Semicolon, "Expect ';' after loop condition.")?;
+
+        let increment = if self.check(TokenKind::RightParen) {
+            Stmt::Empty
+        } else {
+            Stmt::new_expression(self.expression()?)
+        };
+        self.consume(TokenKind::RightParen, "Expect ')' after for clauses.")?;
+
+        let body = self.statement()?;
+        Ok(Stmt::new_block(vec![
+            initializer,
+            Stmt::new_while(
+                token.line,
+                condition,
+                Box::new(Stmt::new_block(vec![body, increment])),
+            ),
+        ]))
+    }
+
     fn stmt_expression(&mut self) -> Result<Stmt, Error> {
         let expr = self.expression()?;
         self.consume(TokenKind::Semicolon, "Expect ';' after expression.")?;
@@ -119,10 +196,10 @@ impl Parser {
         Ok(Stmt::new_print(expr))
     }
 
-    fn assignment(&mut self) -> Result<Expr, Error> {
-        let mut expr = self.equality()?;
+    fn expr_assignment(&mut self) -> Result<Expr, Error> {
+        let mut expr = self.expr_or()?;
         if self.match_token(&[TokenKind::Equal]) {
-            let value = self.assignment()?;
+            let value = self.expr_assignment()?;
 
             let new_expr = if let Expr::Variable { ref name } = expr {
                 let name = name.clone();
@@ -134,26 +211,50 @@ impl Parser {
             if let Some(ex) = new_expr {
                 replace(&mut expr, ex);
             } else {
-                return self.error("Invalid assignment target.".into());
+                return self.error("Invalid expr_assignment target.".into());
             }
         }
         Ok(expr)
     }
 
-    fn equality(&mut self) -> Result<Expr, Error> {
-        let mut expr = self.comparison()?;
+    fn expr_or(&mut self) -> Result<Expr, Error> {
+        let mut expr = self.expr_and()?;
 
-        while self.match_token(&[TokenKind::BangEqual, TokenKind::EqualEqual]) {
+        while self.match_token(&[TokenKind::Or]) {
             let operator = self.previous();
-            let right = self.comparison()?;
+            let right = self.expr_comparison()?;
             Self::extend_binary(&mut expr, operator, right);
         }
 
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> Result<Expr, Error> {
-        let mut expr = self.addition()?;
+    fn expr_and(&mut self) -> Result<Expr, Error> {
+        let mut expr = self.expr_equality()?;
+
+        while self.match_token(&[TokenKind::And]) {
+            let operator = self.previous();
+            let right = self.expr_comparison()?;
+            Self::extend_binary(&mut expr, operator, right);
+        }
+
+        Ok(expr)
+    }
+
+    fn expr_equality(&mut self) -> Result<Expr, Error> {
+        let mut expr = self.expr_comparison()?;
+
+        while self.match_token(&[TokenKind::BangEqual, TokenKind::EqualEqual]) {
+            let operator = self.previous();
+            let right = self.expr_comparison()?;
+            Self::extend_binary(&mut expr, operator, right);
+        }
+
+        Ok(expr)
+    }
+
+    fn expr_comparison(&mut self) -> Result<Expr, Error> {
+        let mut expr = self.expr_addition()?;
 
         while self.match_token(&[
             TokenKind::Greater,
@@ -162,48 +263,48 @@ impl Parser {
             TokenKind::LessEqual,
         ]) {
             let operator = self.previous();
-            let right = self.addition()?;
+            let right = self.expr_addition()?;
             Self::extend_binary(&mut expr, operator, right);
         }
 
         Ok(expr)
     }
 
-    fn addition(&mut self) -> Result<Expr, Error> {
-        let mut expr = self.multiplication()?;
+    fn expr_addition(&mut self) -> Result<Expr, Error> {
+        let mut expr = self.expr_multiplication()?;
 
         while self.match_token(&[TokenKind::Plus, TokenKind::Minus]) {
             let operator = self.previous();
-            let right = self.multiplication()?;
+            let right = self.expr_multiplication()?;
             Self::extend_binary(&mut expr, operator, right);
         }
 
         Ok(expr)
     }
 
-    fn multiplication(&mut self) -> Result<Expr, Error> {
-        let mut expr = self.unary()?;
+    fn expr_multiplication(&mut self) -> Result<Expr, Error> {
+        let mut expr = self.expr_unary()?;
 
         while self.match_token(&[TokenKind::Star, TokenKind::Slash]) {
             let operator = self.previous();
-            let right = self.unary()?;
+            let right = self.expr_unary()?;
             Self::extend_binary(&mut expr, operator, right);
         }
 
         Ok(expr)
     }
 
-    fn unary(&mut self) -> Result<Expr, Error> {
+    fn expr_unary(&mut self) -> Result<Expr, Error> {
         while self.match_token(&[TokenKind::Bang, TokenKind::Minus]) {
             let operator = self.previous();
-            let right = self.unary()?;
+            let right = self.expr_unary()?;
             return Ok(Expr::new_unary(operator, Box::new(right)));
         }
 
-        self.primary()
+        self.expr_primary()
     }
 
-    fn primary(&mut self) -> Result<Expr, Error> {
+    fn expr_primary(&mut self) -> Result<Expr, Error> {
         let token = self.advance();
         match token.kind {
             TokenKind::False
@@ -262,10 +363,7 @@ impl Parser {
             return Ok(self.advance());
         }
 
-        Err(Error {
-            line: self.peek().line,
-            msg: msg.into(),
-        })
+        self.error(format!("{} Found '{:?}'", msg, self.peek()))
     }
 
     fn extend_binary(expr: &mut Expr, operator: Token, right: Expr) {

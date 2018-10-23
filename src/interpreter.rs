@@ -89,7 +89,7 @@ impl Interpreter {
     fn execute(&mut self, stmts: Vec<Stmt>) -> Result<(), ()> {
         let result = {
             let mut worker = Worker::new(&mut self.stack);
-            worker.execute(stmts)
+            worker.run(&stmts)
         };
         if let Err(e) = result {
             self.report_error(e);

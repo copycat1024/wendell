@@ -25,7 +25,8 @@ pub fn main() {
         "Var        : Token name, Expr initializer",
         // statement
         "Block      : Vec<Stmt> statements",
-//        "If         : Expr condition, Box<Stmt> then_block, Box<Stmt> else_block",
+        "If         : u32 line_number, Expr condition, Box<Stmt> then_block, Box<Stmt> else_block",
+        "While      : u32 line_number, Expr condition, Box<Stmt> body",
         "Expression : Expr expression",
         // function stand-in (remove later)
         "Print      : Expr expression",
