@@ -4,56 +4,146 @@ use scanner::token::Token;
 
 #[derive(Debug)]
 pub enum Expr {
-    Assign(Assign),
-    Binary(Binary),
-    Grouping(Grouping),
-    Literal(Literal),
-    Unary(Unary),
-    Variable(Variable),
+    Assign {
+        name: Token,
+        value: Box<Expr>,
+    },
+
+    Binary {
+        left: Box<Expr>,
+        operator: Token,
+        right: Box<Expr>,
+    },
+
+    Grouping {
+        expression: Box<Expr>,
+    },
+
+    Literal {
+        value: Token,
+    },
+
+    Unary {
+        operator: Token,
+        right: Box<Expr>,
+    },
+
+    Variable {
+        name: Token,
+    },
+
     Empty,
 }
 
-#[derive(Debug)]
-pub struct Assign {
-    pub name: Token,
-    pub value: Box<Expr>,
+impl Expr {
+    pub fn accept<R, T:ExprVisitor<R>>(&self, visitor: &mut T) -> R {
+        match self {
+        Expr::Assign {
+            ref name,
+            ref value,
+        } => visitor.visit_assign(
+            name,
+            value,
+        ),
+        Expr::Binary {
+            ref left,
+            ref operator,
+            ref right,
+        } => visitor.visit_binary(
+            left,
+            operator,
+            right,
+        ),
+        Expr::Grouping {
+            ref expression,
+        } => visitor.visit_grouping(
+            expression,
+        ),
+        Expr::Literal {
+            ref value,
+        } => visitor.visit_literal(
+            value,
+        ),
+        Expr::Unary {
+            ref operator,
+            ref right,
+        } => visitor.visit_unary(
+            operator,
+            right,
+        ),
+        Expr::Variable {
+            ref name,
+        } => visitor.visit_variable(
+            name,
+        ),
+            Expr::Empty => visitor.visit_empty_expr(),
+        }
+    }
+
+    pub fn new_assign(
+        name: Token,
+        value: Box<Expr>,
+    ) -> Self {
+        Expr::Assign {
+        name: name,
+        value: value,
+        }
+    }
+
+    pub fn new_binary(
+        left: Box<Expr>,
+        operator: Token,
+        right: Box<Expr>,
+    ) -> Self {
+        Expr::Binary {
+        left: left,
+        operator: operator,
+        right: right,
+        }
+    }
+
+    pub fn new_grouping(
+        expression: Box<Expr>,
+    ) -> Self {
+        Expr::Grouping {
+        expression: expression,
+        }
+    }
+
+    pub fn new_literal(
+        value: Token,
+    ) -> Self {
+        Expr::Literal {
+        value: value,
+        }
+    }
+
+    pub fn new_unary(
+        operator: Token,
+        right: Box<Expr>,
+    ) -> Self {
+        Expr::Unary {
+        operator: operator,
+        right: right,
+        }
+    }
+
+    pub fn new_variable(
+        name: Token,
+    ) -> Self {
+        Expr::Variable {
+        name: name,
+        }
+    }
 }
 
-#[derive(Debug)]
-pub struct Binary {
-    pub left: Box<Expr>,
-    pub operator: Token,
-    pub right: Box<Expr>,
-}
-
-#[derive(Debug)]
-pub struct Grouping {
-    pub expression: Box<Expr>,
-}
-
-#[derive(Debug)]
-pub struct Literal {
-    pub value: Token,
-}
-
-#[derive(Debug)]
-pub struct Unary {
-    pub operator: Token,
-    pub right: Box<Expr>,
-}
-
-#[derive(Debug)]
-pub struct Variable {
-    pub name: Token,
-}
-
-pub trait ExprVisitor<T> {
-    fn visit_expr(&mut self, n: &Expr) -> T;
-    fn visit_assign(&mut self, n: &Assign) -> T;
-    fn visit_binary(&mut self, n: &Binary) -> T;
-    fn visit_grouping(&mut self, n: &Grouping) -> T;
-    fn visit_literal(&mut self, n: &Literal) -> T;
-    fn visit_unary(&mut self, n: &Unary) -> T;
-    fn visit_variable(&mut self, n: &Variable) -> T;
+pub trait ExprVisitor<R> {
+    fn visit_assign(&mut self, name: &Token, value: &Box<Expr>) -> R;
+    fn visit_binary(&mut self, left: &Box<Expr>, operator: &Token, right: &Box<Expr>) -> R;
+    fn visit_grouping(&mut self, expression: &Box<Expr>) -> R;
+    fn visit_literal(&mut self, value: &Token) -> R;
+    fn visit_unary(&mut self, operator: &Token, right: &Box<Expr>) -> R;
+    fn visit_variable(&mut self, name: &Token) -> R;
+    fn visit_empty_expr(&mut self) -> R;
 }
 

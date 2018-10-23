@@ -6,22 +6,26 @@ use ast::expr::*;
 use ast::stmt::*;
 use error::Error;
 use scanner::token::{Token, TokenKind};
-use state::*;
+use stack::*;
 
 pub struct Worker<'a> {
-    state: &'a mut State,
+    stack: &'a mut Stack,
 }
 
 impl<'a> Worker<'a> {
-    pub fn new(state: &'a mut State) -> Self {
-        Self { state: state }
+    pub fn new(stack: &'a mut Stack) -> Self {
+        Self { stack: stack }
     }
 
     pub fn execute(&mut self, stmts: Vec<Stmt>) -> Result<(), Error> {
         for stmt in stmts.into_iter() {
-            self.visit_stmt(&stmt)?;
+            stmt.accept(self)?;
         }
         Ok(())
+    }
+
+    fn evaluate(&mut self, expr: &Expr) -> Result<Instance, Error> {
+        expr.accept(self)
     }
 
     fn primitive_not(&mut self, operator: &Token, value: &Instance) -> Result<Instance, Error> {
@@ -221,37 +225,23 @@ impl<'a> Worker<'a> {
 }
 
 impl<'a> ExprVisitor<Result<Instance, Error>> for Worker<'a> {
-    fn visit_expr(&mut self, n: &Expr) -> Result<Instance, Error> {
-        match n {
-            Expr::Binary(n) => self.visit_binary(n),
-            Expr::Grouping(n) => self.visit_grouping(n),
-            Expr::Literal(n) => self.visit_literal(n),
-            Expr::Unary(n) => self.visit_unary(n),
-            Expr::Variable(n) => self.visit_variable(n),
-            Expr::Assign(n) => self.visit_assign(n),
-            Expr::Empty => self.error("Found empty Expr.".into(), 0),
-        }
+    fn visit_assign(&mut self, name: &Token, value: &Box<Expr>) -> Result<Instance, Error> {
+        let assign_value = self.evaluate(value)?;
+        self.stack.assign(name, assign_value)
     }
 
-    fn visit_assign(&mut self, n: &Assign) -> Result<Instance, Error> {
-        let Assign { name, value } = n;
-        let assign_value = self.visit_expr(value)?;
-        self.state.assign(name, assign_value)
+    fn visit_grouping(&mut self, expression: &Box<Expr>) -> Result<Instance, Error> {
+        self.evaluate(expression)
     }
 
-    fn visit_grouping(&mut self, n: &Grouping) -> Result<Instance, Error> {
-        self.visit_expr(&n.expression)
-    }
-
-    fn visit_binary(&mut self, n: &Binary) -> Result<Instance, Error> {
-        let Binary {
-            operator,
-            left,
-            right,
-        } = n;
-
-        let left = self.visit_expr(&left)?;
-        let right = self.visit_expr(&right)?;
+    fn visit_binary(
+        &mut self,
+        left: &Box<Expr>,
+        operator: &Token,
+        right: &Box<Expr>,
+    ) -> Result<Instance, Error> {
+        let left = self.evaluate(&left)?;
+        let right = self.evaluate(&right)?;
 
         match operator.kind {
             TokenKind::Plus => self.primitive_add(operator, &left, &right),
@@ -274,10 +264,8 @@ impl<'a> ExprVisitor<Result<Instance, Error>> for Worker<'a> {
         }
     }
 
-    fn visit_unary(&mut self, n: &Unary) -> Result<Instance, Error> {
-        let Unary { operator, right } = n;
-
-        let right = self.visit_expr(&right)?;
+    fn visit_unary(&mut self, operator: &Token, right: &Box<Expr>) -> Result<Instance, Error> {
+        let right = self.evaluate(&right)?;
 
         match operator.kind {
             TokenKind::Bang => self.primitive_not(operator, &right),
@@ -286,10 +274,8 @@ impl<'a> ExprVisitor<Result<Instance, Error>> for Worker<'a> {
         }
     }
 
-    fn visit_literal(&mut self, n: &Literal) -> Result<Instance, Error> {
-        let Literal {
-            value: Token { kind, lexeme, line },
-        } = n;
+    fn visit_literal(&mut self, value: &Token) -> Result<Instance, Error> {
+        let Token { kind, lexeme, line } = value;
 
         let ins = match kind {
             TokenKind::NumberLiteral => match lexeme.parse::<f64>() {
@@ -309,27 +295,19 @@ impl<'a> ExprVisitor<Result<Instance, Error>> for Worker<'a> {
         Ok(ins)
     }
 
-    fn visit_variable(&mut self, n: &Variable) -> Result<Instance, Error> {
-        let Variable { name } = n;
-        self.state.get(name)
+    fn visit_variable(&mut self, name: &Token) -> Result<Instance, Error> {
+        self.stack.get(name)
+    }
+
+    fn visit_empty_expr(&mut self) -> Result<Instance, Error> {
+        self.error("Found empty Expr.".into(), 0)
     }
 }
 
 impl<'a> StmtVisitor<Result<(), Error>> for Worker<'a> {
-    fn visit_stmt(&mut self, n: &Stmt) -> Result<(), Error> {
-        match n {
-            Stmt::Expression(n) => self.visit_expression(n),
-            Stmt::Print(n) => self.visit_print(n),
-            Stmt::Var(n) => self.visit_var(n),
-            Stmt::Empty => self.error("Found empty Expr.".into(), 0),
-        }
-    }
-
-    fn visit_print(&mut self, n: &Print) -> Result<(), Error> {
-        let n = &n.expression;
-
-        let v = self.visit_expr(n)?;
-        match v {
+    fn visit_print(&mut self, expression: &Expr) -> Result<(), Error> {
+        let value = self.evaluate(expression)?;
+        match value {
             Instance::String(s) => println!("{}", s),
             Instance::Number(n) => println!("{}", n),
             Instance::Bool(b) => println!("{}", b),
@@ -339,21 +317,32 @@ impl<'a> StmtVisitor<Result<(), Error>> for Worker<'a> {
         Ok(())
     }
 
-    fn visit_expression(&mut self, n: &Expression) -> Result<(), Error> {
-        let n = &n.expression;
-        let v = self.visit_expr(n)?;
+    fn visit_expression(&mut self, expression: &Expr) -> Result<(), Error> {
+        let value = self.evaluate(expression)?;
 
-        match v {
+        match value {
             _ => {
-                println!("{:?}", v);
+                println!("{:?}", value);
                 Ok(())
             }
         }
     }
 
-    fn visit_var(&mut self, n: &Var) -> Result<(), Error> {
-        let Var { name, initializer } = n;
-        let value = self.visit_expr(initializer)?;
-        self.state.define(name, value)
+    fn visit_var(&mut self, name: &Token, initializer: &Expr) -> Result<(), Error> {
+        let value = self.evaluate(initializer)?;
+        self.stack.define(name, value)
+    }
+
+    fn visit_empty_stmt(&mut self) -> Result<(), Error> {
+        self.error("Found empty Expr.".into(), 0)
+    }
+
+    fn visit_block(&mut self, statements: &Vec<Stmt>) -> Result<(), Error> {
+        self.stack.push();
+        for stmt in statements {
+            stmt.accept(self)?;
+        }
+        self.stack.pop();
+        Ok(())
     }
 }

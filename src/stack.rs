@@ -1,10 +1,11 @@
-// state.rs
+// stack.rs
 
 extern crate std;
 
 use error::Error;
 use scanner::token::*;
 use std::collections::HashMap;
+use std::mem::replace;
 
 #[derive(Debug, Clone)]
 pub enum Instance {
@@ -14,25 +15,31 @@ pub enum Instance {
     Bool(bool),
 }
 
-#[derive(Clone)]
-pub struct State {
+pub struct Stack {
+    pub height: usize,
     values: HashMap<String, Instance>,
-    enclosing: Option<Box<State>>,
+    next: Link,
 }
 
-impl State {
+type Link = Option<Box<Stack>>;
+
+impl Stack {
     pub fn new() -> Self {
-        Self {
-            values: HashMap::new(),
-            enclosing: None,
-        }
+        Self::raw_new(0)
     }
 
-    pub fn enclose(state: &State) -> Self {
-        Self {
-            values: HashMap::new(),
-            enclosing: Some(Box::new(state.to_owned())),
-        }
+    pub fn push(&mut self) {
+        let height = self.height;
+        let old_self = replace(self, Self::raw_new(height + 1));
+        self.next = Some(Box::new(old_self));
+    }
+
+    pub fn pop(&mut self) {
+        let new_self = match replace(&mut self.next, None) {
+            Some(link) => link,
+            None => panic!("Cannot pop global scope"),
+        };
+        replace(self, *new_self);
     }
 
     pub fn define(&mut self, name: &Token, value: Instance) -> Result<(), Error> {
@@ -48,15 +55,15 @@ impl State {
         }
     }
 
-    pub fn get(&mut self, name: &Token) -> Result<Instance, Error> {
+    pub fn get(&self, name: &Token) -> Result<Instance, Error> {
         let Token { lexeme, kind, line } = name;
         if let TokenKind::Identifier = kind {
             if let Some(ins) = self.values.get(lexeme) {
                 return Ok(ins.clone());
             }
 
-            if let Some(ref mut state) = self.enclosing {
-                return state.as_mut().get(name);
+            if let Some(ref stack) = self.next {
+                return stack.get(name);
             }
 
             self.error(format!("Undefined variable '{}'.", lexeme), *line)
@@ -76,8 +83,8 @@ impl State {
                 return Ok(value);
             }
 
-            if let Some(ref mut state) = self.enclosing {
-                return state.as_mut().assign(name, value);
+            if let Some(ref mut stack) = self.next {
+                return stack.as_mut().assign(name, value);
             }
 
             self.error(format!("Undefined variable '{}'.", lexeme), *line)
@@ -86,6 +93,14 @@ impl State {
                 format!("Expecting an identifier, found '{}' instead.", lexeme),
                 *line,
             )
+        }
+    }
+
+    fn raw_new(height: usize) -> Self {
+        Self {
+            values: HashMap::new(),
+            height: height,
+            next: None,
         }
     }
 

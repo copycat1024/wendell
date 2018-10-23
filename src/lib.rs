@@ -4,7 +4,7 @@ mod ast;
 mod error;
 mod parser;
 mod scanner;
-mod state;
+mod stack;
 mod worker;
 
 pub mod interpreter;

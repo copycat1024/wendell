@@ -1,0 +1,15 @@
+var a = "A";
+var b = "A";
+var c = "A";
+var res = "";
+{
+  var a = "B";
+  var b = "B";
+  {
+    var a = "C";
+    res = a + b + c;
+  }
+  res = res + " " + a + b + c;
+}
+res = res + " " + a + b + c;
+print res;

@@ -5,32 +5,95 @@ use scanner::token::Token;
 
 #[derive(Debug)]
 pub enum Stmt {
-    Expression(Expression),
-    Print(Print),
-    Var(Var),
+    Var {
+        name: Token,
+        initializer: Expr,
+    },
+
+    Block {
+        statements: Vec<Stmt>,
+    },
+
+    Expression {
+        expression: Expr,
+    },
+
+    Print {
+        expression: Expr,
+    },
+
     Empty,
 }
 
-#[derive(Debug)]
-pub struct Expression {
-    pub expression: Expr,
+impl Stmt {
+    pub fn accept<R, T:StmtVisitor<R>>(&self, visitor: &mut T) -> R {
+        match self {
+        Stmt::Var {
+            ref name,
+            ref initializer,
+        } => visitor.visit_var(
+            name,
+            initializer,
+        ),
+        Stmt::Block {
+            ref statements,
+        } => visitor.visit_block(
+            statements,
+        ),
+        Stmt::Expression {
+            ref expression,
+        } => visitor.visit_expression(
+            expression,
+        ),
+        Stmt::Print {
+            ref expression,
+        } => visitor.visit_print(
+            expression,
+        ),
+            Stmt::Empty => visitor.visit_empty_stmt(),
+        }
+    }
+
+    pub fn new_var(
+        name: Token,
+        initializer: Expr,
+    ) -> Self {
+        Stmt::Var {
+        name: name,
+        initializer: initializer,
+        }
+    }
+
+    pub fn new_block(
+        statements: Vec<Stmt>,
+    ) -> Self {
+        Stmt::Block {
+        statements: statements,
+        }
+    }
+
+    pub fn new_expression(
+        expression: Expr,
+    ) -> Self {
+        Stmt::Expression {
+        expression: expression,
+        }
+    }
+
+    pub fn new_print(
+        expression: Expr,
+    ) -> Self {
+        Stmt::Print {
+        expression: expression,
+        }
+    }
 }
 
-#[derive(Debug)]
-pub struct Print {
-    pub expression: Expr,
-}
-
-#[derive(Debug)]
-pub struct Var {
-    pub name: Token,
-    pub initializer: Expr,
-}
-
-pub trait StmtVisitor<T> {
-    fn visit_stmt(&mut self, n: &Stmt) -> T;
-    fn visit_expression(&mut self, n: &Expression) -> T;
-    fn visit_print(&mut self, n: &Print) -> T;
-    fn visit_var(&mut self, n: &Var) -> T;
+pub trait StmtVisitor<R> {
+    fn visit_var(&mut self, name: &Token, initializer: &Expr) -> R;
+    fn visit_block(&mut self, statements: &Vec<Stmt>) -> R;
+    fn visit_expression(&mut self, expression: &Expr) -> R;
+    fn visit_print(&mut self, expression: &Expr) -> R;
+    fn visit_empty_stmt(&mut self) -> R;
 }
 

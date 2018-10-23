@@ -8,11 +8,11 @@ pub fn main() {
     let output_dir = "src/ast";
 
     let expr_nodes = [
-        "Assign   : Token name, Expr value",
-        "Binary   : Expr left, Token operator, Expr right",
-        "Grouping : Expr expression",
+        "Assign   : Token name, Box<Expr> value",
+        "Binary   : Box<Expr> left, Token operator, Box<Expr> right",
+        "Grouping : Box<Expr> expression",
         "Literal  : Token value",
-        "Unary    : Token operator, Expr right",
+        "Unary    : Token operator, Box<Expr> right",
         "Variable : Token name",
     ];
     let expr_atoms = ["scanner::token::Token"];
@@ -21,9 +21,14 @@ pub fn main() {
     }
 
     let stmt_nodes = [
-        "Expression : Expr expression",
-        "Print      : Expr expression",
+        // declaration
         "Var        : Token name, Expr initializer",
+        // statement
+        "Block      : Vec<Stmt> statements",
+//        "If         : Expr condition, Box<Stmt> then_block, Box<Stmt> else_block",
+        "Expression : Expr expression",
+        // function stand-in (remove later)
+        "Print      : Expr expression",
     ];
     let stmt_atoms = ["ast::expr::Expr", "scanner::token::Token"];
     if let Err(e) = define_ast(output_dir, "Stmt", &stmt_atoms, &stmt_nodes) {
@@ -35,7 +40,7 @@ fn define_ast(dir: &str, base: &str, atoms: &[&str], nodes: &[&str]) -> io::Resu
     let path = format!("{}/{}.rs", dir, base.to_lowercase());
     let mut w = AstWriter::from(File::create(&path)?);
     let config = &AstConfig::new(base, atoms, nodes);
-    let AstConfig { base, nodes, atoms } = config;
+    let AstConfig { atoms, .. } = config;
 
     // Write header
     w.print_header(&path, &atoms)?;
@@ -43,16 +48,11 @@ fn define_ast(dir: &str, base: &str, atoms: &[&str], nodes: &[&str]) -> io::Resu
     // Write base enum
     w.define_base(config)?;
 
-    // Write AST structs
-    for ref node in nodes.iter() {
-        w.define_node(base, node)?;
-    }
+    // Write base impl
+    w.define_impl(config)?;
 
     // Write visitor trait
     w.define_visitor(config)
-
-    // Write pretty printer
-//    w.define_printer(config)
 }
 
 struct AstWriter<T: Write> {
@@ -63,6 +63,8 @@ impl<T: Write> AstWriter<T> {
     fn from(writer: T) -> Self {
         Self { writer: writer }
     }
+
+    // Level 1 (root blocks)
 
     fn print_header(&mut self, path: &str, atoms: &[AstAtom]) -> io::Result<()> {
         let cmt_path: String = path.chars().skip(4).collect();
@@ -79,29 +81,19 @@ impl<T: Write> AstWriter<T> {
         self.println("#[derive(Debug)]")?;
         self.println(format!("pub enum {} {{", base))?;
         for ref node in nodes.iter() {
-            let AstNode { name, .. } = node;
-            self.println(format!("    {}({}),", name, name))?;
+            self.define_node(node)?;
         }
         self.println(format!("    Empty,"))?;
         self.println("}")?;
         self.println("")
     }
 
-    fn define_node(&mut self, base: &str, node: &AstNode) -> io::Result<()> {
-        let AstNode { name, fields } = node;
-        self.println("#[derive(Debug)]")?;
-        self.println(format!("pub struct {} {{", name))?;
-        for field in fields.iter() {
-            let AstField {
-                field_name,
-                field_type,
-            } = field;
-            let field_type = if field_type != base {
-                field_type.clone()
-            } else {
-                format!("Box<{}>", base)
-            };
-            self.println(format!("    pub {}: {},", field_name, field_type))?;
+    fn define_impl(&mut self, config: &AstConfig) -> io::Result<()> {
+        let AstConfig { base, nodes, .. } = config;
+        self.println(format!("impl {} {{", base))?;
+        self.define_accept(base, nodes)?;
+        for node in nodes.iter() {
+            self.define_node_constructors(base, node)?;
         }
         self.println("}")?;
         self.println("")
@@ -109,127 +101,120 @@ impl<T: Write> AstWriter<T> {
 
     fn define_visitor(&mut self, config: &AstConfig) -> io::Result<()> {
         let AstConfig { base, nodes, .. } = config;
-        self.println(format!("pub trait {}Visitor<T> {{", base))?;
-        self.define_visitor_method(base)?;
+        self.println(format!("pub trait {}Visitor<R> {{", base))?;
         for ref node in nodes.iter() {
-            let AstNode { name, .. } = node;
-            self.define_visitor_method(name)?;
+            self.define_node_visitor(node)?;
         }
+        self.define_empty_visitor(base)?;
         self.println("}")?;
         self.println("")
     }
 
-    fn define_visitor_method(&mut self, name: &str) -> io::Result<()> {
-        self.println(format!(
-            "    fn visit_{}(&mut self, n: &{}) -> T;",
-            name.to_lowercase(),
-            name
-        ))
-    }
+    // Level 2 (struct)
 
-    fn define_printer(&mut self, config: &AstConfig) -> io::Result<()> {
-        let AstConfig { base, nodes, .. } = config;
-        self.println(format!("pub struct {}PrettyPrinter;", base))?;
-        self.println(format!(
-            "impl {}Visitor<String> for {}PrettyPrinter {{",
-            base, base
-        ))?;
-        self.define_printer_base(base, nodes)?;
-        for node in nodes.iter() {
-            self.define_printer_node(node, config)?;
+    fn define_node(&mut self, node: &AstNode) -> io::Result<()> {
+        let AstNode { name, fields } = node;
+        self.println(format!("    {} {{", name))?;
+        for field in fields.iter() {
+            let AstField {
+                field_name,
+                field_type,
+            } = field;
+            self.println(format!("        {}: {},", field_name, field_type))?;
         }
-        self.println("}")
-    }
-
-    fn define_printer_base(&mut self, base: &str, nodes: &[AstNode]) -> io::Result<()> {
-        self.define_printer_method(base)?;
-        self.println("        match n {")?;
-        for node in nodes.iter() {
-            let AstNode { name, .. } = node;
-            self.define_printer_base_match(base, name)?;
-        }
-        self.println(format!(r#"            {}::Empty => "empty".into(),"#, base))?;
-        self.println("        }")?;
-        self.println("    }")?;
+        self.println("    },")?;
         self.println("")
     }
 
-    fn define_printer_base_match(&mut self, base: &str, name: &str) -> io::Result<()> {
+    fn define_accept(&mut self, base: &str, nodes: &[AstNode]) -> io::Result<()> {
         self.println(format!(
-            "            {}::{}(n) => self.visit_{}(n),",
-            base,
-            name,
-            name.to_lowercase()
-        ))
+            "    pub fn accept<R, T:{}Visitor<R>>(&self, visitor: &mut T) -> R {{",
+            base
+        ))?;
+        self.println("        match self {")?;
+        for ref node in nodes.iter() {
+            self.define_node_accept(base, node)?;
+        }
+        self.define_empty_accept(base)?;
+        self.println("        }")?;
+        self.println("    }")
     }
 
-    fn define_printer_node(&mut self, node: &AstNode, config: &AstConfig) -> io::Result<()> {
+    // Level 3 (one-liner)
+
+    fn define_node_visitor(&mut self, node: &AstNode) -> io::Result<()> {
         let AstNode { name, fields } = node;
 
-        self.define_printer_method(name)?;
-        self.println("        parenthesize!(")?;
-        self.println(format!(r#"            "{}","#, name.to_lowercase()))?;
-        for field in fields.iter().take(fields.len() - 1) {
-            self.define_printer_node_field(field, config, true)?;
+        let mut field_string = String::new();
+        for field in fields.iter() {
+            let AstField {
+                field_name,
+                field_type,
+            } = field;
+            field_string += format!(", {}: &{}", field_name, field_type).as_str();
         }
-        let mut iter = fields.iter().skip(fields.len() - 1);
-        self.define_printer_node_field(iter.next().unwrap(), config, false)?;
-        self.println("        )")?;
-        self.println("    }")?;
-        self.println("")
-    }
 
-    fn define_printer_node_field(
-        &mut self,
-        field: &AstField,
-        config: &AstConfig,
-        comma: bool,
-    ) -> io::Result<()> {
-        let AstConfig { base, nodes, .. } = config;
-        let AstField {
-            field_name,
-            field_type,
-        } = field;
-
-        let is_node_type = |x: &str| nodes.into_iter().any(|v| &(v.name) == &x);
-        let item_for_base = || {
-            format!(
-                "            self.visit_{}(&n.{}){}",
-                field_type.to_lowercase(),
-                field_name,
-                if comma { "," } else { "" }
-            )
-        };
-        let item_for_node = || {
-            format!(
-                "            self.visit_{}(n.{}){}",
-                field_type.to_lowercase(),
-                field_name,
-                if comma { "," } else { "" }
-            )
-        };
-        let item_for_value = || {
-            format!(
-                "            n.{}{}",
-                field_name,
-                if comma { "," } else { "" }
-            )
-        };
-
-        let item = match field_type {
-            x if x == base => item_for_base(),
-            x if is_node_type(x) => item_for_node(),
-            _ => item_for_value(),
-        };
-        self.println(item)
-    }
-
-    fn define_printer_method(&mut self, name: &str) -> io::Result<()> {
         self.println(format!(
-            "    fn visit_{}(&mut self, n: &{}) -> String {{",
+            "    fn visit_{}(&mut self{}) -> R;",
             name.to_lowercase(),
-            name
+            field_string
         ))
+    }
+
+    fn define_empty_visitor(&mut self, base: &str) -> io::Result<()> {
+        self.println(format!(
+            "    fn visit_empty_{}(&mut self) -> R;",
+            base.to_lowercase()
+        ))
+    }
+
+    fn define_node_accept(&mut self, base: &str, node: &AstNode) -> io::Result<()> {
+        let AstNode { name, fields } = node;
+        let field_names: Vec<&str> = fields.iter().map(|ref f| f.field_name.as_str()).collect();
+
+        self.println(format!("        {}::{} {{", base, name))?;
+        for field in field_names.iter() {
+            self.println(format!("            ref {},", field))?;
+        }
+        self.println(format!(
+            "        }} => visitor.visit_{}(",
+            name.to_lowercase()
+        ))?;
+        for field in field_names.iter() {
+            self.println(format!("            {},", field))?;
+        }
+        self.println("        ),")
+    }
+
+    fn define_empty_accept(&mut self, base: &str) -> io::Result<()> {
+        self.println(format!(
+            "            {}::Empty => visitor.visit_empty_{}(),",
+            base,
+            base.to_lowercase()
+        ))
+    }
+
+    fn define_node_constructors(&mut self, base: &str, node: &AstNode) -> io::Result<()> {
+        let AstNode { name, fields } = node;
+
+        self.println("")?;
+        self.println(format!("    pub fn new_{}(", name.to_lowercase()))?;
+        for field in fields.iter() {
+            let AstField {
+                field_name,
+                field_type,
+            } = field;
+            self.println(format!("        {}: {},", field_name, field_type))?;
+        }
+        self.println("    ) -> Self {")?;
+
+        self.println(format!("        {}::{} {{", base, name))?;
+        for field in fields.iter() {
+            let AstField { field_name, .. } = field;
+            self.println(format!("        {}: {},", field_name, field_name))?;
+        }
+        self.println("        }")?;
+        self.println("    }")
     }
 }
 

@@ -7,21 +7,21 @@ use error::Error;
 use parser::Parser;
 use scanner::token::Token;
 use scanner::Scanner;
-use state::State;
+use stack::Stack;
 use std::fs::File;
 use std::io::{self, BufRead, Read, Write};
 use worker::Worker;
 
 pub struct Interpreter {
     error_flag: bool,
-    state: State,
+    stack: Stack,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Self {
             error_flag: false,
-            state: State::new(),
+            stack: Stack::new(),
         }
     }
 
@@ -88,7 +88,7 @@ impl Interpreter {
 
     fn execute(&mut self, stmts: Vec<Stmt>) -> Result<(), ()> {
         let result = {
-            let mut worker = Worker::new(&mut self.state);
+            let mut worker = Worker::new(&mut self.stack);
             worker.execute(stmts)
         };
         if let Err(e) = result {

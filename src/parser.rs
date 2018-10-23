@@ -67,9 +67,14 @@ impl Parser {
     fn statement(&mut self) -> Result<Stmt, Error> {
         let token = self.peek();
         match token.kind {
+            TokenKind::LeftBrace => self.stmt_block(),
             TokenKind::Print => self.stmt_print(),
             _ => self.stmt_expression(),
         }
+    }
+
+    fn expression(&mut self) -> Result<Expr, Error> {
+        self.assignment()
     }
 
     fn decl_var(&mut self) -> Result<Stmt, Error> {
@@ -78,37 +83,40 @@ impl Parser {
         let init = if self.match_token(&[TokenKind::Equal]) {
             self.expression()?
         } else {
-            Expr::Literal(Literal {
-                value: Token {
-                    kind: TokenKind::Nil,
-                    line: name.line,
-                    lexeme: "nil".into(),
-                },
+            Expr::new_literal(Token {
+                kind: TokenKind::Nil,
+                line: name.line,
+                lexeme: "nil".into(),
             })
         };
         self.consume(TokenKind::Semicolon, "Expect ';' after print statement.")?;
 
-        Ok(Stmt::Var(Var {
-            name: name,
-            initializer: init,
-        }))
+        Ok(Stmt::new_var(name, init))
+    }
+
+    fn stmt_block(&mut self) -> Result<Stmt, Error> {
+        let mut statements: Vec<Stmt> = Vec::new();
+        self.advance(); // eat '{' token
+
+        while !self.check(TokenKind::RightBrace) && !self.is_eof() {
+            statements.push(self.declaration()?);
+        }
+
+        self.consume(TokenKind::RightBrace, "Expect '}' after print statement.")?;
+        Ok(Stmt::new_block(statements))
+    }
+
+    fn stmt_expression(&mut self) -> Result<Stmt, Error> {
+        let expr = self.expression()?;
+        self.consume(TokenKind::Semicolon, "Expect ';' after expression.")?;
+        Ok(Stmt::new_expression(expr))
     }
 
     fn stmt_print(&mut self) -> Result<Stmt, Error> {
         self.advance(); // eat print token
         let expr = self.expression()?;
         self.consume(TokenKind::Semicolon, "Expect ';' after print statement.")?;
-        Ok(Stmt::Print(Print { expression: expr }))
-    }
-
-    fn stmt_expression(&mut self) -> Result<Stmt, Error> {
-        let expr = self.expression()?;
-        self.consume(TokenKind::Semicolon, "Expect ';' after expression.")?;
-        Ok(Stmt::Expression(Expression { expression: expr }))
-    }
-
-    fn expression(&mut self) -> Result<Expr, Error> {
-        self.assignment()
+        Ok(Stmt::new_print(expr))
     }
 
     fn assignment(&mut self) -> Result<Expr, Error> {
@@ -116,13 +124,9 @@ impl Parser {
         if self.match_token(&[TokenKind::Equal]) {
             let value = self.assignment()?;
 
-            let new_expr = if let Expr::Variable(ref v) = expr {
-                let name = v.name.clone();
-                drop(v);
-                Some(Expr::Assign(Assign {
-                    name: name,
-                    value: Box::new(value),
-                }))
+            let new_expr = if let Expr::Variable { ref name } = expr {
+                let name = name.clone();
+                Some(Expr::new_assign(name, Box::new(value)))
             } else {
                 None
             };
@@ -142,13 +146,7 @@ impl Parser {
         while self.match_token(&[TokenKind::BangEqual, TokenKind::EqualEqual]) {
             let operator = self.previous();
             let right = self.comparison()?;
-            let old_expr = replace(&mut expr, Expr::Empty);
-            let new_expr = Expr::Binary(Binary {
-                left: Box::new(old_expr),
-                operator: operator,
-                right: Box::new(right),
-            });
-            replace(&mut expr, new_expr);
+            Self::extend_binary(&mut expr, operator, right);
         }
 
         Ok(expr)
@@ -165,13 +163,7 @@ impl Parser {
         ]) {
             let operator = self.previous();
             let right = self.addition()?;
-            let old_expr = replace(&mut expr, Expr::Empty);
-            let new_expr = Expr::Binary(Binary {
-                left: Box::new(old_expr),
-                operator: operator,
-                right: Box::new(right),
-            });
-            replace(&mut expr, new_expr);
+            Self::extend_binary(&mut expr, operator, right);
         }
 
         Ok(expr)
@@ -183,13 +175,7 @@ impl Parser {
         while self.match_token(&[TokenKind::Plus, TokenKind::Minus]) {
             let operator = self.previous();
             let right = self.multiplication()?;
-            let old_expr = replace(&mut expr, Expr::Empty);
-            let new_expr = Expr::Binary(Binary {
-                left: Box::new(old_expr),
-                operator: operator,
-                right: Box::new(right),
-            });
-            replace(&mut expr, new_expr);
+            Self::extend_binary(&mut expr, operator, right);
         }
 
         Ok(expr)
@@ -201,13 +187,7 @@ impl Parser {
         while self.match_token(&[TokenKind::Star, TokenKind::Slash]) {
             let operator = self.previous();
             let right = self.unary()?;
-            let old_expr = replace(&mut expr, Expr::Empty);
-            let new_expr = Expr::Binary(Binary {
-                left: Box::new(old_expr),
-                operator: operator,
-                right: Box::new(right),
-            });
-            replace(&mut expr, new_expr);
+            Self::extend_binary(&mut expr, operator, right);
         }
 
         Ok(expr)
@@ -217,10 +197,7 @@ impl Parser {
         while self.match_token(&[TokenKind::Bang, TokenKind::Minus]) {
             let operator = self.previous();
             let right = self.unary()?;
-            return Ok(Expr::Unary(Unary {
-                operator: operator,
-                right: Box::new(right),
-            }));
+            return Ok(Expr::new_unary(operator, Box::new(right)));
         }
 
         self.primary()
@@ -233,14 +210,12 @@ impl Parser {
             | TokenKind::True
             | TokenKind::Nil
             | TokenKind::NumberLiteral
-            | TokenKind::StringLiteral => Ok(Expr::Literal(Literal { value: token })),
-            TokenKind::Identifier => Ok(Expr::Variable(Variable { name: token })),
+            | TokenKind::StringLiteral => Ok(Expr::new_literal(token)),
+            TokenKind::Identifier => Ok(Expr::new_variable(token)),
             TokenKind::LeftParen => {
                 let expr = self.expression()?;
                 self.consume(TokenKind::RightParen, "Expect ')' after expression.")?;
-                Ok(Expr::Grouping(Grouping {
-                    expression: Box::new(expr),
-                }))
+                Ok(Expr::new_grouping(Box::new(expr)))
             }
             _ => self.error(format!("Unexpected token '{}'", token.to_string())),
         }
@@ -291,6 +266,12 @@ impl Parser {
             line: self.peek().line,
             msg: msg.into(),
         })
+    }
+
+    fn extend_binary(expr: &mut Expr, operator: Token, right: Expr) {
+        let old_expr = replace(expr, Expr::Empty);
+        let new_expr = Expr::new_binary(Box::new(old_expr), operator, Box::new(right));
+        replace(expr, new_expr);
     }
 
     fn error<T>(&self, msg: String) -> Result<T, Error> {
