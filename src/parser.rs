@@ -304,6 +304,20 @@ impl Parser {
         self.expr_primary()
     }
 
+    fn expr_call(&mut self) -> Result<Expr, Error> {
+        let mut expr = self.expr_primary()?;
+
+        loop {
+            if self.match_token(&[TokenKind::LeftParen]) {
+                self.finish_expr_call(&mut expr);
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
     fn expr_primary(&mut self) -> Result<Expr, Error> {
         let token = self.advance();
         match token.kind {
@@ -320,6 +334,22 @@ impl Parser {
             }
             _ => self.error(format!("Unexpected token '{}'", token.to_string())),
         }
+    }
+
+    fn finish_expr_call(&mut self, callee: &mut Expr) -> Result<(), Error> {
+        let mut arguments: Vec<Expr> = Vec::new();
+        if !self.check(TokenKind::RightParen) {
+            while {
+                arguments.push(self.expression()?);
+                self.match_token(&[TokenKind::Comma])
+            } {}
+        }
+        let paren = self.consume(TokenKind::RightParen, "Expect ')' after arguments.")?;
+
+        let old_callee = replace(callee, Expr::Empty);
+        replace(callee, Expr::new_call(Box::new(old_callee), paren, arguments));
+
+        Ok(())
     }
 
     pub fn is_eof(&self) -> bool {

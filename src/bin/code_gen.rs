@@ -13,6 +13,7 @@ pub fn main() {
         "Grouping : Box<Expr> expression",
         "Literal  : Token value",
         "Unary    : Token operator, Box<Expr> right",
+        "Call     : Box<Expr> callee, Token paren, Vec<Expr> arguments",
         "Variable : Token name",
     ];
     let expr_atoms = ["scanner::token::Token"];

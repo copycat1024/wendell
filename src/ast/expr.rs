@@ -28,6 +28,12 @@ pub enum Expr {
         right: Box<Expr>,
     },
 
+    Call {
+        callee: Box<Expr>,
+        paren: Token,
+        arguments: Vec<Expr>,
+    },
+
     Variable {
         name: Token,
     },
@@ -53,6 +59,11 @@ impl Expr {
                 ref operator,
                 ref right,
             } => visitor.visit_unary(operator, right),
+            Expr::Call {
+                ref callee,
+                ref paren,
+                ref arguments,
+            } => visitor.visit_call(callee, paren, arguments),
             Expr::Variable { ref name } => visitor.visit_variable(name),
             Expr::Empty => visitor.visit_empty_expr(),
         }
@@ -90,6 +101,14 @@ impl Expr {
         }
     }
 
+    pub fn new_call(callee: Box<Expr>, paren: Token, arguments: Vec<Expr>) -> Self {
+        Expr::Call {
+            callee: callee,
+            paren: paren,
+            arguments: arguments,
+        }
+    }
+
     pub fn new_variable(name: Token) -> Self {
         Expr::Variable { name: name }
     }
@@ -101,6 +120,7 @@ pub trait ExprVisitor<R> {
     fn visit_grouping(&mut self, expression: &Box<Expr>) -> R;
     fn visit_literal(&mut self, value: &Token) -> R;
     fn visit_unary(&mut self, operator: &Token, right: &Box<Expr>) -> R;
+    fn visit_call(&mut self, callee: &Box<Expr>, paren: &Token, arguments: &Vec<Expr>) -> R;
     fn visit_variable(&mut self, name: &Token) -> R;
     fn visit_empty_expr(&mut self) -> R;
 }

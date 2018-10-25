@@ -5,6 +5,6 @@ mod error;
 mod parser;
 mod scanner;
 mod stack;
-mod worker;
+//mod worker;
 
-pub mod interpreter;
+//pub mod interpreter;
