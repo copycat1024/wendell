@@ -1,4 +1,4 @@
-// bin/code_gen.rs
+// bin/ast_gen.rs
 
 use std::fs::File;
 use std::io::{self, Write};

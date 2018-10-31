@@ -43,22 +43,18 @@ impl Stack {
     }
 
     pub fn define(&mut self, name: &Token, value: Instance) -> Result<(), Error> {
-        let Token { lexeme, kind, line } = name;
-        if let TokenKind::Identifier = kind {
-            self.values.insert(lexeme.to_string(), value);
-            Ok(())
-        } else {
-            self.error(
-                format!("Expecting an identifier, found '{}' instead.", lexeme),
-                *line,
-            )
+        let Token { kind, .. } = name;
+        if let TokenKind::Identifier(var_name) = kind {
+            self.values.insert(var_name.to_string(), value);
+            return Ok(());
         }
+        unreachable!()
     }
 
     pub fn get(&self, name: &Token) -> Result<Instance, Error> {
-        let Token { lexeme, kind, line } = name;
-        if let TokenKind::Identifier = kind {
-            if let Some(ins) = self.values.get(lexeme) {
+        let Token { kind, line } = name;
+        if let TokenKind::Identifier(var_name) = kind {
+            if let Some(ins) = self.values.get(var_name) {
                 return Ok(ins.clone());
             }
 
@@ -66,19 +62,15 @@ impl Stack {
                 return stack.get(name);
             }
 
-            self.error(format!("Undefined variable '{}'.", lexeme), *line)
-        } else {
-            self.error(
-                format!("Expecting an identifier, found '{}' instead.", lexeme),
-                *line,
-            )
+            return self.error(format!("Undefined variable '{}'.", var_name), *line);
         }
+        unreachable!()
     }
 
     pub fn assign(&mut self, name: &Token, value: Instance) -> Result<Instance, Error> {
-        let Token { lexeme, kind, line } = name;
-        if let TokenKind::Identifier = kind {
-            if let Some(ref mut entry) = self.values.get_mut(lexeme) {
+        let Token { kind, line } = name;
+        if let TokenKind::Identifier(var_name) = kind {
+            if let Some(ref mut entry) = self.values.get_mut(var_name) {
                 **entry = value.clone();
                 return Ok(value);
             }
@@ -87,13 +79,9 @@ impl Stack {
                 return stack.as_mut().assign(name, value);
             }
 
-            self.error(format!("Undefined variable '{}'.", lexeme), *line)
-        } else {
-            self.error(
-                format!("Expecting an identifier, found '{}' instead.", lexeme),
-                *line,
-            )
+            return self.error(format!("Undefined variable '{}'.", var_name), *line);
         }
+        unreachable!()
     }
 
     fn raw_new(height: usize) -> Self {

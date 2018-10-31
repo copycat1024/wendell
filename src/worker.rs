@@ -218,11 +218,11 @@ impl<'a> Worker<'a> {
     }
 
     fn operator_error(&self, operator: &Token, operator_kind: &str) -> Result<Instance, Error> {
-        let Token { kind, lexeme, line } = operator;
+        let Token { kind, line } = operator;
         self.error(
             format!(
-                "{:?} operator '{}' is not a {} operator.",
-                kind, lexeme, operator_kind
+                "{:?} operator is not a {} operator.",
+                kind, operator_kind
             ),
             *line,
         )
@@ -234,11 +234,11 @@ impl<'a> Worker<'a> {
         expected: &str,
         value: &Instance,
     ) -> Result<Instance, Error> {
-        let Token { kind, lexeme, line } = operator;
+        let Token { kind, line } = operator;
         self.error(
             format!(
-                "{:?} operator '{}' expected type '{}', found '{:?}' instead.",
-                kind, lexeme, expected, value
+                "{:?} operator expected type '{}', found '{:?}' instead.",
+                kind, expected, value
             ),
             *line,
         )
@@ -266,11 +266,11 @@ impl<'a> Worker<'a> {
         value1: &Instance,
         value2: &Instance,
     ) -> Result<Instance, Error> {
-        let Token { kind, lexeme, line } = operator;
+        let Token { kind, line } = operator;
         self.error(
             format!(
-                "{:?} operator '{}' expected type '{}', found '{:?}' and '{:?}' instead.",
-                kind, lexeme, expected, value1, value2
+                "{:?} operator expected type '{}', found '{:?}' and '{:?}' instead.",
+                kind, expected, value1, value2
             ),
             *line,
         )
@@ -364,21 +364,21 @@ impl<'a> ExprVisitor<Result<Instance, Error>> for Worker<'a> {
     }
 
     fn visit_literal(&mut self, value: &Token) -> Result<Instance, Error> {
-        let Token { kind, lexeme, line } = value;
+        let Token { kind, line } = value;
 
         let ins = match kind {
-            TokenKind::NumberLiteral => match lexeme.parse::<f64>() {
+            TokenKind::NumberLiteral(value_string) => match value_string.parse::<f64>() {
                 Ok(n) => Instance::Number(n),
                 Err(e) => self.error(
-                    format!("Cannot parse '{}' into number ({}).", lexeme, e),
+                    format!("Cannot parse '{}' into number ({}).", value_string, e),
                     *line,
                 )?,
             },
-            TokenKind::StringLiteral => Instance::String(lexeme.to_string()),
+            TokenKind::StringLiteral(value_string) => Instance::String(value_string.to_string()),
             TokenKind::True => Instance::Bool(true),
             TokenKind::False => Instance::Bool(false),
             TokenKind::Nil => Instance::Nil,
-            _ => self.error(format!("'{}' is not a literal.", lexeme), *line)?,
+            _ => unreachable!(),
         };
 
         Ok(ins)

@@ -2,6 +2,7 @@
 
 pub mod token;
 
+use self::token::TokenKind::*;
 use self::token::{Token, TokenKind};
 use error::Error;
 
@@ -30,57 +31,53 @@ impl Scanner {
             self.scan_token()?;
         }
 
-        self.tokens.push(Token {
-            kind: TokenKind::Eof,
-            lexeme: "".into(),
-            line: self.line,
-        });
+        self.add_token(Eof);
 
         Ok(())
     }
 
-    fn scan_token<'b>(&'b mut self) -> Result<(), Error> {
+    fn scan_token(&mut self) -> Result<(), Error> {
         let c = self.advance();
         match c {
-            '(' => self.add_token(TokenKind::LeftParen),
-            ')' => self.add_token(TokenKind::RightParen),
-            '{' => self.add_token(TokenKind::LeftBrace),
-            '}' => self.add_token(TokenKind::RightBrace),
-            ',' => self.add_token(TokenKind::Comma),
-            '.' => self.add_token(TokenKind::Dot),
-            '-' => self.add_token(TokenKind::Minus),
-            '+' => self.add_token(TokenKind::Plus),
-            ';' => self.add_token(TokenKind::Semicolon),
-            '*' => self.add_token(TokenKind::Star),
+            '(' => self.add_token(LeftParen),
+            ')' => self.add_token(RightParen),
+            '{' => self.add_token(LeftBrace),
+            '}' => self.add_token(RightBrace),
+            ',' => self.add_token(Comma),
+            '.' => self.add_token(Dot),
+            '-' => self.add_token(Minus),
+            '+' => self.add_token(Plus),
+            ';' => self.add_token(Semicolon),
+            '*' => self.add_token(Star),
             '!' => {
                 let kind = if self.match_char('=') {
-                    TokenKind::BangEqual
+                    BangEqual
                 } else {
-                    TokenKind::Bang
+                    Bang
                 };
                 self.add_token(kind);
             }
             '=' => {
                 let kind = if self.match_char('=') {
-                    TokenKind::EqualEqual
+                    EqualEqual
                 } else {
-                    TokenKind::Equal
+                    Equal
                 };
                 self.add_token(kind);
             }
             '<' => {
                 let kind = if self.match_char('=') {
-                    TokenKind::LessEqual
+                    LessEqual
                 } else {
-                    TokenKind::Less
+                    Less
                 };
                 self.add_token(kind);
             }
             '>' => {
                 let kind = if self.match_char('=') {
-                    TokenKind::GreaterEqual
+                    GreaterEqual
                 } else {
-                    TokenKind::Greater
+                    Greater
                 };
                 self.add_token(kind);
             }
@@ -90,7 +87,7 @@ impl Scanner {
                         self.advance();
                     }
                 } else {
-                    self.add_token(TokenKind::Slash);
+                    self.add_token(Slash);
                 }
             }
             ' ' => {}
@@ -103,6 +100,85 @@ impl Scanner {
             _ => return self.error(format!("Unknown character '{}'", c)),
         }
         Ok(())
+    }
+
+    fn add_string_literal(&mut self) -> Result<(), Error> {
+        while self.peek() != '"' && !self.is_eof() {
+            if self.peek() == '\n' {
+                self.line += 1;
+            }
+            self.advance();
+        }
+
+        // Unterminated string
+        if self.is_eof() {
+            return self.error("Unterminated string.".into());
+        }
+
+        // The closing "
+        self.advance();
+
+        // Trim the surrounding quotes
+        let lexeme: String = {
+            let lexeme_slice: &[char] = &(self.source)[self.start + 1..self.current - 1];
+            lexeme_slice.iter().collect()
+        };
+        self.add_token(StringLiteral(lexeme));
+        Ok(())
+    }
+
+    fn add_number_literal(&mut self) {
+        while Self::is_digit(self.peek()) {
+            self.advance();
+        }
+
+        // Look for a fractional part.
+        if self.peek() == '.' && Self::is_digit(self.peek_next()) {
+            // Consume the "."
+            self.advance();
+
+            while Self::is_digit(self.peek()) {
+                self.advance();
+            }
+        }
+
+        let lexeme: String = {
+            let lexeme_slice: &[char] = &(self.source)[self.start..self.current];
+            lexeme_slice.iter().collect()
+        };
+        self.add_token(NumberLiteral(lexeme));
+    }
+
+    fn add_identifier(&mut self) {
+        while Self::is_alphanumeric(self.peek()) {
+            self.advance();
+        }
+
+        let lexeme: String = {
+            let lexeme_slice: &[char] = &(self.source)[self.start..self.current];
+            lexeme_slice.iter().collect()
+        };
+
+        let kind = match &lexeme as &str {
+            "and" => And,
+            "class" => Class,
+            "else" => Else,
+            "false" => False,
+            "for" => For,
+            "fun" => Fun,
+            "if" => If,
+            "nil" => Nil,
+            "or" => Or,
+            "print" => Print,
+            "return" => Return,
+            "super" => Super,
+            "this" => This,
+            "true" => True,
+            "var" => Var,
+            "while" => While,
+            _ => Identifier(lexeme),
+        };
+        self.add_token(kind);
     }
 
     fn is_eof(&self) -> bool {
@@ -141,97 +217,7 @@ impl Scanner {
     }
 
     fn add_token(&mut self, kind: TokenKind) {
-        let lexeme_slice: &[char] = &(self.source)[self.start..self.current];
-        let lexeme: String = lexeme_slice.iter().collect();
-        self.tokens.push(Token {
-            kind: kind,
-            lexeme: lexeme,
-            line: self.line,
-        });
-    }
-
-    fn add_string_literal(&mut self) -> Result<(), Error> {
-        while self.peek() != '"' && !self.is_eof() {
-            if self.peek() == '\n' {
-                self.line += 1;
-            }
-            self.advance();
-        }
-
-        // Unterminated string
-        if self.is_eof() {
-            return self.error("Unterminated string.".into());
-        }
-
-        // The closing "
-        self.advance();
-
-        // Trim the surrounding quotes
-        let lexeme_slice: &[char] = &(self.source)[self.start + 1..self.current - 1];
-        let lexeme: String = lexeme_slice.iter().collect();
-        self.tokens.push(Token {
-            kind: TokenKind::StringLiteral,
-            lexeme: lexeme,
-            line: self.line,
-        });
-        Ok(())
-    }
-
-    fn add_number_literal(&mut self) {
-        while Self::is_digit(self.peek()) {
-            self.advance();
-        }
-
-        // Look for a fractional part.
-        if self.peek() == '.' && Self::is_digit(self.peek_next()) {
-            // Consume the "."
-            self.advance();
-
-            while Self::is_digit(self.peek()) {
-                self.advance();
-            }
-        }
-
-        let lexeme_slice: &[char] = &(self.source)[self.start..self.current];
-        let lexeme: String = lexeme_slice.iter().collect();
-        self.tokens.push(Token {
-            kind: TokenKind::NumberLiteral,
-            lexeme: lexeme,
-            line: self.line,
-        });
-    }
-
-    fn add_identifier(&mut self) {
-        while Self::is_alphanumeric(self.peek()) {
-            self.advance();
-        }
-
-        let lexeme_slice: &[char] = &(self.source)[self.start..self.current];
-        let lexeme: String = lexeme_slice.iter().collect();
-        let kind = match &lexeme as &str {
-            "and" => TokenKind::And,
-            "class" => TokenKind::Class,
-            "else" => TokenKind::Else,
-            "false" => TokenKind::False,
-            "for" => TokenKind::For,
-            "fun" => TokenKind::Fun,
-            "if" => TokenKind::If,
-            "nil" => TokenKind::Nil,
-            "or" => TokenKind::Or,
-            "print" => TokenKind::Print,
-            "return" => TokenKind::Return,
-            "super" => TokenKind::Super,
-            "this" => TokenKind::This,
-            "true" => TokenKind::True,
-            "var" => TokenKind::Var,
-            "while" => TokenKind::While,
-            _ => TokenKind::Identifier,
-        };
-        self.tokens.push(Token {
-            kind: kind,
-            lexeme: lexeme,
-            line: self.line,
-        });
+        self.tokens.push(Token::new(kind, self.line));
     }
 
     fn error(&self, msg: String) -> Result<(), Error> {

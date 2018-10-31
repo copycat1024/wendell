@@ -2,6 +2,7 @@
 
 use error::Error;
 use function::callable::Callable;
+use scanner::token::TokenKind::*;
 use scanner::token::*;
 use stack::*;
 use worker::Worker;
@@ -26,11 +27,7 @@ impl Callable for TestFun {
 
 pub fn load_std_api(stack: &mut Stack) -> Result<(), Error> {
     stack.define(
-        &Token {
-            lexeme: "test".into(),
-            line: 0,
-            kind: TokenKind::Identifier,
-        },
+        &Token::new(Identifier(String::from("test")), 0),
         Instance::Function(Box::new(TestFun {})),
     )
 }
