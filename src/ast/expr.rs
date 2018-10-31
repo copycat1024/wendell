@@ -2,7 +2,7 @@
 
 use scanner::token::Token;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Assign {
         name: Token,

@@ -1,10 +1,12 @@
 // root lib.rs
 
+mod api;
 mod ast;
 mod error;
+mod function;
 mod parser;
 mod scanner;
 mod stack;
-//mod worker;
+mod worker;
 
-//pub mod interpreter;
+pub mod interpreter;

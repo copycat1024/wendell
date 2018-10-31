@@ -28,6 +28,7 @@ pub fn main() {
         "Block      : Vec<Stmt> statements",
         "If         : u32 line_number, Expr condition, Box<Stmt> then_block, Box<Stmt> else_block",
         "While      : u32 line_number, Expr condition, Box<Stmt> body",
+        "Function   : Token name, Vec<Token> params, Box<Stmt> body",
         "Expression : Expr expression",
         // function stand-in (remove later)
         "Print      : Expr expression",
@@ -80,7 +81,7 @@ impl<T: Write> AstWriter<T> {
 
     fn define_base(&mut self, config: &AstConfig) -> io::Result<()> {
         let AstConfig { base, nodes, .. } = config;
-        self.println("#[derive(Debug)]")?;
+        self.println("#[derive(Debug, Clone)]")?;
         self.println(format!("pub enum {} {{", base))?;
         for ref node in nodes.iter() {
             self.define_node(node)?;

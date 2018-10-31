@@ -3,7 +3,7 @@
 use ast::expr::Expr;
 use scanner::token::Token;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Var {
         name: Token,
@@ -24,6 +24,12 @@ pub enum Stmt {
     While {
         line_number: u32,
         condition: Expr,
+        body: Box<Stmt>,
+    },
+
+    Function {
+        name: Token,
+        params: Vec<Token>,
         body: Box<Stmt>,
     },
 
@@ -57,6 +63,11 @@ impl Stmt {
                 ref condition,
                 ref body,
             } => visitor.visit_while(line_number, condition, body),
+            Stmt::Function {
+                ref name,
+                ref params,
+                ref body,
+            } => visitor.visit_function(name, params, body),
             Stmt::Expression { ref expression } => visitor.visit_expression(expression),
             Stmt::Print { ref expression } => visitor.visit_print(expression),
             Stmt::Empty => visitor.visit_empty_stmt(),
@@ -98,6 +109,14 @@ impl Stmt {
         }
     }
 
+    pub fn new_function(name: Token, params: Vec<Token>, body: Box<Stmt>) -> Self {
+        Stmt::Function {
+            name: name,
+            params: params,
+            body: body,
+        }
+    }
+
     pub fn new_expression(expression: Expr) -> Self {
         Stmt::Expression {
             expression: expression,
@@ -122,6 +141,7 @@ pub trait StmtVisitor<R> {
         else_block: &Box<Stmt>,
     ) -> R;
     fn visit_while(&mut self, line_number: &u32, condition: &Expr, body: &Box<Stmt>) -> R;
+    fn visit_function(&mut self, name: &Token, params: &Vec<Token>, body: &Box<Stmt>) -> R;
     fn visit_expression(&mut self, expression: &Expr) -> R;
     fn visit_print(&mut self, expression: &Expr) -> R;
     fn visit_empty_stmt(&mut self) -> R;

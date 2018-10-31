@@ -1,7 +1,5 @@
 // scanner/mod.rs
 
-extern crate std;
-
 pub mod token;
 
 use self::token::{Token, TokenKind};

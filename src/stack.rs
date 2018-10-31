@@ -1,8 +1,7 @@
 // stack.rs
 
-extern crate std;
-
 use error::Error;
+use function::callable::Callable;
 use scanner::token::*;
 use std::collections::HashMap;
 use std::mem::replace;
@@ -13,6 +12,7 @@ pub enum Instance {
     Number(f64),
     String(String),
     Bool(bool),
+    Function(Box<Callable>),
 }
 
 pub struct Stack {

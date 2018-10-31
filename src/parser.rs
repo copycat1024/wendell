@@ -1,7 +1,5 @@
 // parser.rs
 
-extern crate std;
-
 use ast::expr::*;
 use ast::stmt::*;
 use error::Error;
@@ -60,6 +58,7 @@ impl Parser {
         let token = self.peek();
         match token.kind {
             TokenKind::Var => self.decl_var(),
+            TokenKind::Fun => self.decl_fun("function"),
             _ => self.statement(),
         }
     }
@@ -95,6 +94,31 @@ impl Parser {
         self.consume(TokenKind::Semicolon, "Expect ';' after var statement.")?;
 
         Ok(Stmt::new_var(name, init))
+    }
+
+    fn decl_fun(&mut self, kind: &str) -> Result<Stmt, Error> {
+        self.advance(); // eat fun token
+        let name = self.consume(TokenKind::Identifier, &format!("Expect {} name.", kind))?;
+        self.consume(
+            TokenKind::LeftParen,
+            &format!("Expect '(' after {} name.", kind),
+        )?;
+
+        let mut parameters: Vec<Token> = Vec::new();
+        if !self.check(TokenKind::RightParen) {
+            while {
+                parameters.push(self.consume(TokenKind::Identifier, "Expect parameter name.")?);
+                self.match_token(&[TokenKind::Comma])
+            } {}
+        }
+        self.consume(TokenKind::RightParen, "Expect ')' after parameters.")?;
+
+        if !self.check(TokenKind::LeftBrace) {
+            self.error::<()>(format!("Expect '{{' before {} body.", kind))?;
+        }
+
+        let body = self.stmt_block()?;
+        Ok(Stmt::new_function(name, parameters, Box::new(body)))
     }
 
     fn stmt_block(&mut self) -> Result<Stmt, Error> {
@@ -301,7 +325,7 @@ impl Parser {
             return Ok(Expr::new_unary(operator, Box::new(right)));
         }
 
-        self.expr_primary()
+        self.expr_call()
     }
 
     fn expr_call(&mut self) -> Result<Expr, Error> {
@@ -309,7 +333,7 @@ impl Parser {
 
         loop {
             if self.match_token(&[TokenKind::LeftParen]) {
-                self.finish_expr_call(&mut expr);
+                self.finish_expr_call(&mut expr)?;
             } else {
                 break;
             }
@@ -347,7 +371,10 @@ impl Parser {
         let paren = self.consume(TokenKind::RightParen, "Expect ')' after arguments.")?;
 
         let old_callee = replace(callee, Expr::Empty);
-        replace(callee, Expr::new_call(Box::new(old_callee), paren, arguments));
+        replace(
+            callee,
+            Expr::new_call(Box::new(old_callee), paren, arguments),
+        );
 
         Ok(())
     }

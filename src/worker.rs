@@ -1,15 +1,15 @@
 // worker.rs
 
-extern crate std;
-
 use ast::expr::*;
 use ast::stmt::*;
 use error::Error;
+use function::callable::Callable;
+use function::*;
 use scanner::token::{Token, TokenKind};
 use stack::*;
 
 pub struct Worker<'a> {
-    stack: &'a mut Stack,
+    pub stack: &'a mut Stack,
 }
 
 impl<'a> Worker<'a> {
@@ -24,7 +24,7 @@ impl<'a> Worker<'a> {
         Ok(())
     }
 
-    fn execute(&mut self, stmt: &Stmt) -> Result<(), Error> {
+    pub fn execute(&mut self, stmt: &Stmt) -> Result<(), Error> {
         stmt.accept(self)
     }
 
@@ -133,6 +133,7 @@ impl<'a> Worker<'a> {
                 Instance::Nil => Ok(Instance::Bool(true)),
                 _ => Ok(Instance::Bool(false)),
             },
+            _ => Ok(Instance::Bool(false)),
         }
     }
 
@@ -339,6 +340,29 @@ impl<'a> ExprVisitor<Result<Instance, Error>> for Worker<'a> {
         }
     }
 
+    fn visit_call(
+        &mut self,
+        callee: &Box<Expr>,
+        paren: &Token,
+        arguments: &Vec<Expr>,
+    ) -> Result<Instance, Error> {
+        let callee = self.evaluate(callee)?;
+        let mut unpacked_arg: Vec<Instance> = Vec::new();
+
+        for arg in arguments {
+            unpacked_arg.push(self.evaluate(arg)?);
+        }
+
+        if let Instance::Function(fun) = callee {
+            fun.call(self, paren, &unpacked_arg)
+        } else {
+            self.error(
+                format!("Expected a function, found '{:?}' instead", callee),
+                paren.line,
+            )
+        }
+    }
+
     fn visit_literal(&mut self, value: &Token) -> Result<Instance, Error> {
         let Token { kind, lexeme, line } = value;
 
@@ -420,6 +444,18 @@ impl<'a> StmtVisitor<Result<(), Error>> for Worker<'a> {
         Ok(())
     }
 
+    fn visit_function(
+        &mut self,
+        name: &Token,
+        params: &Vec<Token>,
+        body: &Box<Stmt>,
+    ) -> Result<(), Error> {
+        let fun = AulUserFunction::new(name, params, body);
+        let wrapped_fun = Box::new(fun) as Box<Callable>;
+        self.stack.define(name, Instance::Function(wrapped_fun))?;
+        Ok(())
+    }
+
     fn visit_expression(&mut self, expression: &Expr) -> Result<(), Error> {
         self.evaluate(expression)?;
         Ok(())
@@ -431,6 +467,7 @@ impl<'a> StmtVisitor<Result<(), Error>> for Worker<'a> {
             Instance::String(s) => println!("{}", s),
             Instance::Number(n) => println!("{}", n),
             Instance::Bool(b) => println!("{}", b),
+            Instance::Function(_) => println!("function"),
             Instance::Nil => println!("nil"),
         }
 

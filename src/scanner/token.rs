@@ -1,7 +1,5 @@
 // scanner/token.rs
 
-extern crate std;
-
 use std::fmt;
 
 #[derive(Debug, PartialEq, Copy, Clone)]

@@ -1,7 +1,6 @@
 // interpreter.rs
 
-extern crate std;
-
+use api::load_std_api;
 use ast::stmt::Stmt;
 use error::Error;
 use parser::Parser;
@@ -19,9 +18,14 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
+        let mut stack = Stack::new();
+        if let Err(e) = load_std_api(&mut stack) {
+            println!("Error loading std api: {:?}", e);
+        }
+        stack.push();
         Self {
             error_flag: false,
-            stack: Stack::new(),
+            stack: stack,
         }
     }
 
