@@ -13,6 +13,6 @@ pub mod interpreter;
 mod test {
     #[test]
     fn main() {
-        assert!(true);
+        assert!(false);
     }
 }
