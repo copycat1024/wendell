@@ -3,7 +3,7 @@ on:
   pull_request:
     types: [opened, reopened, edited]
 jobs:
-  check-bats-version:
+  run-lint-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
