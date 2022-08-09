@@ -1,5 +1,3 @@
-// ast/expr.rs
-
 use scanner::token::Token;
 
 #[derive(Debug, Clone)]
@@ -70,57 +68,49 @@ impl Expr {
     }
 
     pub fn new_assign(name: Token, value: Box<Expr>) -> Self {
-        Expr::Assign {
-            name: name,
-            value: value,
-        }
+        Expr::Assign { name, value }
     }
 
     pub fn new_binary(left: Box<Expr>, operator: Token, right: Box<Expr>) -> Self {
         Expr::Binary {
-            left: left,
-            operator: operator,
-            right: right,
+            left,
+            operator,
+            right,
         }
     }
 
     pub fn new_grouping(expression: Box<Expr>) -> Self {
-        Expr::Grouping {
-            expression: expression,
-        }
+        Expr::Grouping { expression }
     }
 
     pub fn new_literal(value: Token) -> Self {
-        Expr::Literal { value: value }
+        Expr::Literal { value }
     }
 
     pub fn new_unary(operator: Token, right: Box<Expr>) -> Self {
-        Expr::Unary {
-            operator: operator,
-            right: right,
-        }
+        Expr::Unary { operator, right }
     }
 
     pub fn new_call(callee: Box<Expr>, paren: Token, arguments: Vec<Expr>) -> Self {
         Expr::Call {
-            callee: callee,
-            paren: paren,
-            arguments: arguments,
+            callee,
+            paren,
+            arguments,
         }
     }
 
     pub fn new_variable(name: Token) -> Self {
-        Expr::Variable { name: name }
+        Expr::Variable { name }
     }
 }
 
 pub trait ExprVisitor<R> {
-    fn visit_assign(&mut self, name: &Token, value: &Box<Expr>) -> R;
-    fn visit_binary(&mut self, left: &Box<Expr>, operator: &Token, right: &Box<Expr>) -> R;
-    fn visit_grouping(&mut self, expression: &Box<Expr>) -> R;
+    fn visit_assign(&mut self, name: &Token, value: &Expr) -> R;
+    fn visit_binary(&mut self, left: &Expr, operator: &Token, right: &Expr) -> R;
+    fn visit_grouping(&mut self, expression: &Expr) -> R;
     fn visit_literal(&mut self, value: &Token) -> R;
-    fn visit_unary(&mut self, operator: &Token, right: &Box<Expr>) -> R;
-    fn visit_call(&mut self, callee: &Box<Expr>, paren: &Token, arguments: &Vec<Expr>) -> R;
+    fn visit_unary(&mut self, operator: &Token, right: &Expr) -> R;
+    fn visit_call(&mut self, callee: &Expr, paren: &Token, arguments: &[Expr]) -> R;
     fn visit_variable(&mut self, name: &Token) -> R;
     fn visit_empty_expr(&mut self) -> R;
 }

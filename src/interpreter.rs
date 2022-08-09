@@ -1,5 +1,3 @@
-// interpreter.rs
-
 use api::load_std_api;
 use ast::stmt::Stmt;
 use error::Error;
@@ -17,18 +15,6 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new() -> Self {
-        let mut stack = Stack::new();
-        if let Err(e) = load_std_api(&mut stack) {
-            println!("Error loading std api: {:?}", e);
-        }
-        stack.push();
-        Self {
-            error_flag: false,
-            stack: stack,
-        }
-    }
-
     pub fn run_file(&mut self, file_name: &str) {
         let mut fh = File::open(file_name).expect("File not found");
 
@@ -41,21 +27,21 @@ impl Interpreter {
 
     pub fn run_prompt(&mut self) {
         let stdin = io::stdin();
-        let mut iter = stdin.lock().lines();
+        let iter = stdin.lock().lines();
         let mut line_num = 1;
         let print_head = |num: &u32| {
             print!("{:>4}> ", num);
             io::stdout().flush().unwrap();
         };
         print_head(&line_num);
-        while let Some(line) = iter.next() {
+        for line in iter {
             self.error_flag = false;
-            if let Ok(_) = self.run(line.unwrap(), line_num) {
+            if self.run(line.unwrap(), line_num).is_ok() {
                 line_num += 1;
             }
             print_head(&line_num);
         }
-        println!("");
+        println!();
         println!("Exited on end of stream.");
     }
 
@@ -110,5 +96,19 @@ impl Interpreter {
     fn report(&mut self, line: u32, msg: String) {
         println!("[line {}] Error: {}", line, msg);
         self.error_flag = true;
+    }
+}
+
+impl Default for Interpreter {
+    fn default() -> Self {
+        let mut stack = Stack::default();
+        if let Err(e) = load_std_api(&mut stack) {
+            println!("Error loading std api: {:?}", e);
+        }
+        stack.push();
+        Self {
+            error_flag: false,
+            stack,
+        }
     }
 }

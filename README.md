@@ -1,4 +1,4 @@
-# aulac
+# wendell
 An intepreting programing language based on lox
 
 ### Requirement

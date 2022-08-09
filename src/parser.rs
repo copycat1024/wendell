@@ -1,5 +1,3 @@
-// parser.rs
-
 use ast::expr::*;
 use ast::stmt::*;
 use error::Error;
@@ -16,7 +14,7 @@ pub struct Parser {
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Self {
-            tokens: tokens,
+            tokens,
             current: 0,
             stmts: Vec::new(),
         }
@@ -220,7 +218,7 @@ impl Parser {
             };
 
             if let Some(ex) = new_expr {
-                replace(&mut expr, ex);
+                expr = ex;
             } else {
                 return self.error("Invalid expr_assignment target.".into());
             }
@@ -301,7 +299,7 @@ impl Parser {
     }
 
     fn expr_unary(&mut self) -> Result<Expr, Error> {
-        while self.match_token(&[Bang, Minus]) {
+        if self.match_token(&[Bang, Minus]) {
             let operator = self.previous();
             let right = self.expr_unary()?;
             return Ok(Expr::new_unary(operator, Box::new(right)));
@@ -336,7 +334,7 @@ impl Parser {
                 self.consume(&RightParen, "Expect ')' after expression.")?;
                 Ok(Expr::new_grouping(Box::new(expr)))
             }
-            _ => self.error(format!("Unexpected token '{}'", token.to_string())),
+            _ => self.error(format!("Unexpected token '{}'", token)),
         }
     }
 
@@ -351,10 +349,8 @@ impl Parser {
         let paren = self.consume(&RightParen, "Expect ')' after arguments.")?;
 
         let old_callee = replace(callee, Expr::Empty);
-        replace(
-            callee,
-            Expr::new_call(Box::new(old_callee), paren, arguments),
-        );
+
+        *callee = Expr::new_call(Box::new(old_callee), paren, arguments);
 
         Ok(())
     }
@@ -405,14 +401,13 @@ impl Parser {
 
     fn extend_binary(expr: &mut Expr, operator: Token, right: Expr) {
         let old_expr = replace(expr, Expr::Empty);
-        let new_expr = Expr::new_binary(Box::new(old_expr), operator, Box::new(right));
-        replace(expr, new_expr);
+        *expr = Expr::new_binary(Box::new(old_expr), operator, Box::new(right));
     }
 
     fn error<T>(&self, msg: String) -> Result<T, Error> {
         Err(Error {
             line: self.peek().line,
-            msg: msg,
+            msg,
         })
     }
 }

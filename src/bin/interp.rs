@@ -1,20 +1,23 @@
-// bin/interp.rs
-
-extern crate aulac;
+extern crate wendell;
 
 use std::env;
-use aulac::interpreter::Interpreter;
+use wendell::interpreter::Interpreter;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let mut intr = Interpreter::new();
-    if args.len() > 2 {
-        println!("Usage: cargo run <script_file>");
-    } else if args.len() == 2 {
-        intr.run_file(&args[1]);
-    } else {
-        println!("Aulac 0.0.1 interpreter.");
-        println!("Press Ctrl^Z to exit.");
-        intr.run_prompt();
-    }
+    let mut intr = Interpreter::default();
+
+    match args.len() {
+        0 | 1 => {
+            println!("wendell 0.0.1 interpreter.");
+            println!("Press Ctrl^Z to exit.");
+            intr.run_prompt();
+        }
+        2 => {
+            intr.run_file(&args[1]);
+        }
+        _ => {
+            println!("Usage: cargo run <script_file>");
+        }
+    };
 }

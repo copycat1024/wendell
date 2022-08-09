@@ -1,5 +1,3 @@
-// root lib.rs
-
 mod api;
 mod ast;
 mod error;

@@ -1,5 +1,3 @@
-// api/mod.rs
-
 use error::Error;
 use function::callable::Callable;
 use scanner::token::TokenKind::*;
@@ -15,9 +13,9 @@ impl Callable for TestFun {
         &self,
         _worker: &mut Worker,
         _paren: &Token,
-        arguments: &Vec<Instance>,
+        arguments: &[Instance],
     ) -> Result<Instance, Error> {
-        println!("{}", "test");
+        println!("test");
         for arg in arguments {
             println!("{:?}", arg);
         }

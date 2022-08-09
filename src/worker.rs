@@ -1,5 +1,3 @@
-// worker.rs
-
 use ast::expr::*;
 use ast::stmt::*;
 use error::Error;
@@ -14,11 +12,11 @@ pub struct Worker<'a> {
 
 impl<'a> Worker<'a> {
     pub fn new(stack: &'a mut Stack) -> Self {
-        Self { stack: stack }
+        Self { stack }
     }
 
     pub fn run(&mut self, stmts: &[Stmt]) -> Result<(), Error> {
-        for stmt in stmts.into_iter() {
+        for stmt in stmts.iter() {
             self.execute(stmt)?;
         }
         Ok(())
@@ -35,14 +33,14 @@ impl<'a> Worker<'a> {
     fn primitive_not(&mut self, operator: &Token, value: &Instance) -> Result<Instance, Error> {
         match value {
             Instance::Bool(v) => Ok(Instance::Bool(!v)),
-            _ => self.unary_error(operator, "Bool", &value),
+            _ => self.unary_error(operator, "Bool", value),
         }
     }
 
     fn primitive_neg(&mut self, operator: &Token, value: &Instance) -> Result<Instance, Error> {
         match value {
             Instance::Number(v) => Ok(Instance::Number(-v)),
-            _ => self.unary_error(operator, "Number", &value),
+            _ => self.unary_error(operator, "Number", value),
         }
     }
 
@@ -55,13 +53,13 @@ impl<'a> Worker<'a> {
         match value1 {
             Instance::Number(v1) => match value2 {
                 Instance::Number(v2) => Ok(Instance::Number(v1 + v2)),
-                _ => self.binary_error(operator, "Number", &value1, &value2),
+                _ => self.binary_error(operator, "Number", value1, value2),
             },
             Instance::String(ref v1) => match value2 {
                 Instance::String(v2) => Ok(Instance::String(format!("{}{}", v1, v2))),
-                _ => self.binary_error(operator, "String", &value1, &value2),
+                _ => self.binary_error(operator, "String", value1, value2),
             },
-            _ => self.binary_error(operator, "Number | String", &value1, &value2),
+            _ => self.binary_error(operator, "Number | String", value1, value2),
         }
     }
 
@@ -74,9 +72,9 @@ impl<'a> Worker<'a> {
         match value1 {
             Instance::Number(v1) => match value2 {
                 Instance::Number(v2) => Ok(Instance::Number(v1 - v2)),
-                _ => self.binary_error(operator, "Number", &value1, &value2),
+                _ => self.binary_error(operator, "Number", value1, value2),
             },
-            _ => self.binary_error(operator, "Number", &value1, &value2),
+            _ => self.binary_error(operator, "Number", value1, value2),
         }
     }
 
@@ -89,9 +87,9 @@ impl<'a> Worker<'a> {
         match value1 {
             Instance::Number(v1) => match value2 {
                 Instance::Number(v2) => Ok(Instance::Number(v1 * v2)),
-                _ => self.binary_error(operator, "Number", &value1, &value2),
+                _ => self.binary_error(operator, "Number", value1, value2),
             },
-            _ => self.binary_error(operator, "Number", &value1, &value2),
+            _ => self.binary_error(operator, "Number", value1, value2),
         }
     }
 
@@ -104,9 +102,9 @@ impl<'a> Worker<'a> {
         match value1 {
             Instance::Number(v1) => match value2 {
                 Instance::Number(v2) => Ok(Instance::Number(v1 / v2)),
-                _ => self.binary_error(operator, "Number", &value1, &value2),
+                _ => self.binary_error(operator, "Number", value1, value2),
             },
-            _ => self.binary_error(operator, "Number", &value1, &value2),
+            _ => self.binary_error(operator, "Number", value1, value2),
         }
     }
 
@@ -146,13 +144,13 @@ impl<'a> Worker<'a> {
         match value1 {
             Instance::Number(v1) => match value2 {
                 Instance::Number(v2) => Ok(Instance::Bool(v1 < v2)),
-                _ => self.binary_error(operator, "Number", &value1, &value2),
+                _ => self.binary_error(operator, "Number", value1, value2),
             },
             Instance::String(ref v1) => match value2 {
                 Instance::String(ref v2) => Ok(Instance::Bool(v1 < v2)),
-                _ => self.binary_error(operator, "String", &value1, &value2),
+                _ => self.binary_error(operator, "String", value1, value2),
             },
-            _ => self.binary_error(operator, "Number | String", &value1, &value2),
+            _ => self.binary_error(operator, "Number | String", value1, value2),
         }
     }
 
@@ -220,10 +218,7 @@ impl<'a> Worker<'a> {
     fn operator_error(&self, operator: &Token, operator_kind: &str) -> Result<Instance, Error> {
         let Token { kind, line } = operator;
         self.error(
-            format!(
-                "{:?} operator is not a {} operator.",
-                kind, operator_kind
-            ),
+            format!("{:?} operator is not a {} operator.", kind, operator_kind),
             *line,
         )
     }
@@ -277,28 +272,25 @@ impl<'a> Worker<'a> {
     }
 
     fn error<T>(&self, msg: String, line: u32) -> Result<T, Error> {
-        Err(Error {
-            line: line,
-            msg: msg,
-        })
+        Err(Error { line, msg })
     }
 }
 
 impl<'a> ExprVisitor<Result<Instance, Error>> for Worker<'a> {
-    fn visit_assign(&mut self, name: &Token, value: &Box<Expr>) -> Result<Instance, Error> {
+    fn visit_assign(&mut self, name: &Token, value: &Expr) -> Result<Instance, Error> {
         let assign_value = self.evaluate(value)?;
         self.stack.assign(name, assign_value)
     }
 
-    fn visit_grouping(&mut self, expression: &Box<Expr>) -> Result<Instance, Error> {
+    fn visit_grouping(&mut self, expression: &Expr) -> Result<Instance, Error> {
         self.evaluate(expression)
     }
 
     fn visit_binary(
         &mut self,
-        left: &Box<Expr>,
+        left: &Expr,
         operator: &Token,
-        right: &Box<Expr>,
+        right: &Expr,
     ) -> Result<Instance, Error> {
         match operator.kind {
             TokenKind::Or => return self.primitive_or(operator, left, right),
@@ -306,8 +298,8 @@ impl<'a> ExprVisitor<Result<Instance, Error>> for Worker<'a> {
             _ => (),
         };
 
-        let left = self.evaluate(&left)?;
-        let right = self.evaluate(&right)?;
+        let left = self.evaluate(left)?;
+        let right = self.evaluate(right)?;
 
         match operator.kind {
             TokenKind::Plus => self.primitive_add(operator, &left, &right),
@@ -330,8 +322,8 @@ impl<'a> ExprVisitor<Result<Instance, Error>> for Worker<'a> {
         }
     }
 
-    fn visit_unary(&mut self, operator: &Token, right: &Box<Expr>) -> Result<Instance, Error> {
-        let right = self.evaluate(&right)?;
+    fn visit_unary(&mut self, operator: &Token, right: &Expr) -> Result<Instance, Error> {
+        let right = self.evaluate(right)?;
 
         match operator.kind {
             TokenKind::Bang => self.primitive_not(operator, &right),
@@ -342,9 +334,9 @@ impl<'a> ExprVisitor<Result<Instance, Error>> for Worker<'a> {
 
     fn visit_call(
         &mut self,
-        callee: &Box<Expr>,
+        callee: &Expr,
         paren: &Token,
-        arguments: &Vec<Expr>,
+        arguments: &[Expr],
     ) -> Result<Instance, Error> {
         let callee = self.evaluate(callee)?;
         let mut unpacked_arg: Vec<Instance> = Vec::new();
@@ -399,7 +391,7 @@ impl<'a> StmtVisitor<Result<(), Error>> for Worker<'a> {
         self.stack.define(name, value)
     }
 
-    fn visit_block(&mut self, statements: &Vec<Stmt>) -> Result<(), Error> {
+    fn visit_block(&mut self, statements: &[Stmt]) -> Result<(), Error> {
         self.stack.push();
         for stmt in statements {
             self.execute(stmt)?;
@@ -412,15 +404,17 @@ impl<'a> StmtVisitor<Result<(), Error>> for Worker<'a> {
         &mut self,
         line_number: &u32,
         condition: &Expr,
-        then_block: &Box<Stmt>,
-        else_block: &Box<Stmt>,
+        then_block: &Stmt,
+        else_block: &Stmt,
     ) -> Result<(), Error> {
         match self.evaluate(condition)? {
-            Instance::Bool(con) => if con {
-                self.execute(then_block)
-            } else {
-                self.execute(else_block)
-            },
+            Instance::Bool(con) => {
+                if con {
+                    self.execute(then_block)
+                } else {
+                    self.execute(else_block)
+                }
+            }
             other => self.condition_error("If", line_number, &other),
         }
     }
@@ -429,15 +423,17 @@ impl<'a> StmtVisitor<Result<(), Error>> for Worker<'a> {
         &mut self,
         line_number: &u32,
         condition: &Expr,
-        body: &Box<Stmt>,
+        body: &Stmt,
     ) -> Result<(), Error> {
         loop {
             match self.evaluate(condition)? {
-                Instance::Bool(con) => if con {
-                    self.execute(&body)?;
-                } else {
-                    break;
-                },
+                Instance::Bool(con) => {
+                    if con {
+                        self.execute(body)?;
+                    } else {
+                        break;
+                    }
+                }
                 other => self.condition_error("While", line_number, &other)?,
             }
         }
@@ -447,11 +443,11 @@ impl<'a> StmtVisitor<Result<(), Error>> for Worker<'a> {
     fn visit_function(
         &mut self,
         name: &Token,
-        params: &Vec<Token>,
-        body: &Box<Stmt>,
+        params: &[Token],
+        body: &Stmt,
     ) -> Result<(), Error> {
         let fun = AulUserFunction::new(name, params, body);
-        let wrapped_fun = Box::new(fun) as Box<Callable>;
+        let wrapped_fun = Box::new(fun) as Box<dyn Callable>;
         self.stack.define(name, Instance::Function(wrapped_fun))?;
         Ok(())
     }

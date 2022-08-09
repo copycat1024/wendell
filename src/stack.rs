@@ -1,5 +1,3 @@
-// stack.rs
-
 use error::Error;
 use function::callable::Callable;
 use scanner::token::*;
@@ -12,7 +10,7 @@ pub enum Instance {
     Number(f64),
     String(String),
     Bool(bool),
-    Function(Box<Callable>),
+    Function(Box<dyn Callable>),
 }
 
 pub struct Stack {
@@ -24,10 +22,6 @@ pub struct Stack {
 type Link = Option<Box<Stack>>;
 
 impl Stack {
-    pub fn new() -> Self {
-        Self::raw_new(0)
-    }
-
     pub fn push(&mut self) {
         let height = self.height;
         let old_self = replace(self, Self::raw_new(height + 1));
@@ -39,7 +33,7 @@ impl Stack {
             Some(link) => link,
             None => panic!("Cannot pop global scope"),
         };
-        replace(self, *new_self);
+        *self = *new_self;
     }
 
     pub fn define(&mut self, name: &Token, value: Instance) -> Result<(), Error> {
@@ -87,15 +81,18 @@ impl Stack {
     fn raw_new(height: usize) -> Self {
         Self {
             values: HashMap::new(),
-            height: height,
+            height,
             next: None,
         }
     }
 
     fn error<T>(&self, msg: String, line: u32) -> Result<T, Error> {
-        Err(Error {
-            line: line,
-            msg: msg,
-        })
+        Err(Error { line, msg })
+    }
+}
+
+impl Default for Stack {
+    fn default() -> Self {
+        Self::raw_new(0)
     }
 }

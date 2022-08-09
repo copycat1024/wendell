@@ -1,5 +1,3 @@
-// bin/ast_gen.rs
-
 use std::fs::File;
 use std::io::{self, Write};
 use std::ops::Deref;
@@ -46,7 +44,7 @@ fn define_ast(dir: &str, base: &str, atoms: &[&str], nodes: &[&str]) -> io::Resu
     let AstConfig { atoms, .. } = config;
 
     // Write header
-    w.print_header(&path, &atoms)?;
+    w.print_header(&path, atoms)?;
 
     // Write base enum
     w.define_base(config)?;
@@ -64,7 +62,7 @@ struct AstWriter<T: Write> {
 
 impl<T: Write> AstWriter<T> {
     fn from(writer: T) -> Self {
-        Self { writer: writer }
+        Self { writer }
     }
 
     // Level 1 (root blocks)
@@ -83,10 +81,10 @@ impl<T: Write> AstWriter<T> {
         let AstConfig { base, nodes, .. } = config;
         self.println("#[derive(Debug, Clone)]")?;
         self.println(format!("pub enum {} {{", base))?;
-        for ref node in nodes.iter() {
+        for node in nodes.iter() {
             self.define_node(node)?;
         }
-        self.println(format!("    Empty,"))?;
+        self.println("    Empty,".to_string())?;
         self.println("}")?;
         self.println("")
     }
@@ -105,7 +103,7 @@ impl<T: Write> AstWriter<T> {
     fn define_visitor(&mut self, config: &AstConfig) -> io::Result<()> {
         let AstConfig { base, nodes, .. } = config;
         self.println(format!("pub trait {}Visitor<R> {{", base))?;
-        for ref node in nodes.iter() {
+        for node in nodes.iter() {
             self.define_node_visitor(node)?;
         }
         self.define_empty_visitor(base)?;
@@ -135,7 +133,7 @@ impl<T: Write> AstWriter<T> {
             base
         ))?;
         self.println("        match self {")?;
-        for ref node in nodes.iter() {
+        for node in nodes.iter() {
             self.define_node_accept(base, node)?;
         }
         self.define_empty_accept(base)?;
@@ -173,7 +171,7 @@ impl<T: Write> AstWriter<T> {
 
     fn define_node_accept(&mut self, base: &str, node: &AstNode) -> io::Result<()> {
         let AstNode { name, fields } = node;
-        let field_names: Vec<&str> = fields.iter().map(|ref f| f.field_name.as_str()).collect();
+        let field_names: Vec<&str> = fields.iter().map(|f| f.field_name.as_str()).collect();
 
         self.println(format!("        {}::{} {{", base, name))?;
         for field in field_names.iter() {
@@ -225,10 +223,10 @@ trait PrintLine<S: Deref<Target = str>> {
     fn println(&mut self, text: S) -> io::Result<()>;
 }
 
-impl<'a, T: Write, S: Deref<Target = str>> PrintLine<S> for AstWriter<T> {
+impl<T: Write, S: Deref<Target = str>> PrintLine<S> for AstWriter<T> {
     fn println(&mut self, text: S) -> io::Result<()> {
-        self.writer.write(text.as_bytes())?;
-        self.writer.write(b"\n")?;
+        self.writer.write_all(text.as_bytes())?;
+        self.writer.write_all(b"\n")?;
         Ok(())
     }
 }
@@ -276,12 +274,9 @@ impl AstNode {
         let mut iter = node.split(':');
         let name = get_next(&mut iter);
         let field_string = get_next(&mut iter);
-        let field_output = field_string
-            .split(", ")
-            .map(|field| AstField::new(field))
-            .collect();
+        let field_output = field_string.split(", ").map(AstField::new).collect();
         Self {
-            name: name,
+            name,
             fields: field_output,
         }
     }
@@ -299,12 +294,12 @@ impl AstField {
         let field_type = get_next(&mut iter);
         let field_name = get_next(&mut iter);
         Self {
-            field_name: field_name,
-            field_type: field_type,
+            field_name,
+            field_type,
         }
     }
 }
 
-fn get_next(i: &mut Iterator<Item = &str>) -> String {
+fn get_next(i: &mut dyn Iterator<Item = &str>) -> String {
     i.next().unwrap().trim().to_string()
 }

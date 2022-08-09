@@ -1,5 +1,3 @@
-// function/mod.rs
-
 pub mod callable;
 
 use self::callable::Callable;
@@ -17,11 +15,11 @@ pub struct AulUserFunction {
 }
 
 impl AulUserFunction {
-    pub fn new(name: &Token, params: &Vec<Token>, body: &Box<Stmt>) -> Self {
+    pub fn new(name: &Token, params: &[Token], body: &Stmt) -> Self {
         Self {
             name: name.clone(),
-            params: params.clone(),
-            body: body.as_ref().clone(),
+            params: params.to_vec(),
+            body: body.clone(),
         }
     }
 }
@@ -31,17 +29,15 @@ impl Callable for AulUserFunction {
         &self,
         worker: &mut Worker,
         _paren: &Token,
-        arguments: &Vec<Instance>,
+        arguments: &[Instance],
     ) -> Result<Instance, Error> {
-        let mut i = 0;
         worker.stack.push();
-        for ref p in self.params.iter() {
+        for (i, p) in self.params.iter().enumerate() {
             if let Some(ins) = arguments.get(i) {
                 worker.stack.define(p, ins.clone())?;
             } else {
                 worker.stack.define(p, Instance::Nil)?;
             }
-            i += 1;
         }
 
         worker.execute(&self.body)?;

@@ -1,5 +1,3 @@
-// ast/stmt.rs
-
 use ast::expr::Expr;
 use scanner::token::Token;
 
@@ -75,16 +73,11 @@ impl Stmt {
     }
 
     pub fn new_var(name: Token, initializer: Expr) -> Self {
-        Stmt::Var {
-            name: name,
-            initializer: initializer,
-        }
+        Stmt::Var { name, initializer }
     }
 
     pub fn new_block(statements: Vec<Stmt>) -> Self {
-        Stmt::Block {
-            statements: statements,
-        }
+        Stmt::Block { statements }
     }
 
     pub fn new_if(
@@ -94,54 +87,46 @@ impl Stmt {
         else_block: Box<Stmt>,
     ) -> Self {
         Stmt::If {
-            line_number: line_number,
-            condition: condition,
-            then_block: then_block,
-            else_block: else_block,
+            line_number,
+            condition,
+            then_block,
+            else_block,
         }
     }
 
     pub fn new_while(line_number: u32, condition: Expr, body: Box<Stmt>) -> Self {
         Stmt::While {
-            line_number: line_number,
-            condition: condition,
-            body: body,
+            line_number,
+            condition,
+            body,
         }
     }
 
     pub fn new_function(name: Token, params: Vec<Token>, body: Box<Stmt>) -> Self {
-        Stmt::Function {
-            name: name,
-            params: params,
-            body: body,
-        }
+        Stmt::Function { name, params, body }
     }
 
     pub fn new_expression(expression: Expr) -> Self {
-        Stmt::Expression {
-            expression: expression,
-        }
+        Stmt::Expression { expression }
     }
 
     pub fn new_print(expression: Expr) -> Self {
-        Stmt::Print {
-            expression: expression,
-        }
+        Stmt::Print { expression }
     }
 }
 
 pub trait StmtVisitor<R> {
     fn visit_var(&mut self, name: &Token, initializer: &Expr) -> R;
-    fn visit_block(&mut self, statements: &Vec<Stmt>) -> R;
+    fn visit_block(&mut self, statements: &[Stmt]) -> R;
     fn visit_if(
         &mut self,
         line_number: &u32,
         condition: &Expr,
-        then_block: &Box<Stmt>,
-        else_block: &Box<Stmt>,
+        then_block: &Stmt,
+        else_block: &Stmt,
     ) -> R;
-    fn visit_while(&mut self, line_number: &u32, condition: &Expr, body: &Box<Stmt>) -> R;
-    fn visit_function(&mut self, name: &Token, params: &Vec<Token>, body: &Box<Stmt>) -> R;
+    fn visit_while(&mut self, line_number: &u32, condition: &Expr, body: &Stmt) -> R;
+    fn visit_function(&mut self, name: &Token, params: &[Token], body: &Stmt) -> R;
     fn visit_expression(&mut self, expression: &Expr) -> R;
     fn visit_print(&mut self, expression: &Expr) -> R;
     fn visit_empty_stmt(&mut self) -> R;

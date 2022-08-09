@@ -1,5 +1,3 @@
-// scanner/mod.rs
-
 pub mod token;
 
 use self::token::TokenKind::*;
@@ -182,7 +180,7 @@ impl Scanner {
     }
 
     fn is_eof(&self) -> bool {
-        return self.current >= self.source.len();
+        self.current >= self.source.len()
     }
 
     fn advance(&mut self) -> char {
@@ -199,21 +197,21 @@ impl Scanner {
             return false;
         }
         self.current += 1;
-        return true;
+        true
     }
 
     fn peek(&mut self) -> char {
         if self.is_eof() {
             return '\0';
         };
-        return self.source[self.current];
+        self.source[self.current]
     }
 
     fn peek_next(&mut self) -> char {
         if self.current + 1 >= self.source.len() {
             return '\0';
         }
-        return self.source[self.current + 1];
+        self.source[self.current + 1]
     }
 
     fn add_token(&mut self, kind: TokenKind) {
@@ -223,7 +221,7 @@ impl Scanner {
     fn error(&self, msg: String) -> Result<(), Error> {
         Err(Error {
             line: self.line,
-            msg: msg,
+            msg,
         })
     }
 

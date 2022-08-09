@@ -1,5 +1,3 @@
-// scanner/token.rs
-
 use self::TokenKind::*;
 use std::fmt;
 
@@ -63,10 +61,7 @@ pub struct Token {
 
 impl Token {
     pub fn new(kind: TokenKind, line: u32) -> Self {
-        Self {
-            kind: kind,
-            line: line,
-        }
+        Self { kind, line }
     }
 }
 
