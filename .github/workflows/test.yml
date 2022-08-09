@@ -3,17 +3,44 @@ on:
   pull_request:
     types: [opened, reopened, edited]
 jobs:
-  run-lint-and-test:
+  run-ci:
+    name: Run clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
           components: clippy
           override: true
-      - run: cargo build
-      - uses: actions-rs/clippy-check@v1
+
+      - name: Run build
+        run: cargo build
+
+      - name: Run test
+        run: cargo test
+
+      - name: Run cargo-clippy
+        uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-      - run: cargo test
+
+      - name: Run cargo-tarpaulin
+        uses: actions-rs/tarpaulin@v0.1
+        with:
+          version: "0.15.0"
+          args: "-- --test-threads 1"
+
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v1.0.2
+        with:
+          token: ${{secrets.CODECOV_TOKEN}}
+
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v1
+        with:
+          name: code-coverage-report
+          path: cobertura.xml
