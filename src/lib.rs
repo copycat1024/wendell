@@ -8,3 +8,11 @@ mod stack;
 mod worker;
 
 pub mod interpreter;
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn main() {
+        assert!(true);
+    }
+}
