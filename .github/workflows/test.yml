@@ -1,5 +1,7 @@
 name: test
-on: [push]
+on:
+  pull_request:
+    types: [opened, reopened]
 jobs:
   check-bats-version:
     runs-on: ubuntu-latest
@@ -10,6 +12,8 @@ jobs:
           toolchain: nightly
           components: clippy
           override: true
+      - run: cargo build
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+      - run: cargo test
